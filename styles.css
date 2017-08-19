@@ -1,0 +1,8 @@
+.RemoveHeaderExtension {
+    opacity: 0 !important;
+    transition: opacity 0.5s ease-in-out;
+}
+
+.RemoveHeaderExtension:hover {
+    opacity: 1 !important;
+}

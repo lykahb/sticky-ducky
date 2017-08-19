@@ -1,0 +1,27 @@
+{
+  "manifest_version": 2,
+  "name": "Remove headers",
+  "description": "This extension removes header from the current page",
+  "version": "1.0",
+  "browser_action": {
+    "default_icon": "icon.png",
+    "default_popup": "popup.html"
+  },
+  "permissions": [
+    "tabs"
+  ],
+  "content_scripts": [
+    {
+      "matches": [ "http://*/*", "https://*/*" ] ,
+      "css": [
+        "styles.css"
+      ],
+      "js": [
+        "lib/jquery-3.1.1.js",
+        "lib/modernizr-3.5.0.js",
+        "lib/underscore-1.8.3.js",
+        "content.js"
+      ]
+    }
+  ]
+}
