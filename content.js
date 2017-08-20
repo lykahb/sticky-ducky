@@ -4,6 +4,8 @@
 var isDevelopment = true;
 
 var exploredHeaders = [];
+let selectorGenerator = new CssSelectorGenerator()
+let styleFixElement = null;
 
 function log(...args) {
     if (isDevelopment) {
@@ -67,22 +69,36 @@ function exploreInVicinity(el) {
     return coords.map(([x, y]) => elementFromPoint(x, y)).filter(Boolean);
 }
 
-function fixElementOpacity(el) {
+function fixElementOpacity(els) {
     // Specificity is too low if other classes override opacity
-    $(el).addClass("RemoveHeaderExtension");
+    $(els).addClass("RemoveHeaderExtension");
     // In case the header has animation keyframes involving opacity
-    if ($(el).css("animation")) {
-        $(el).css("animation", "none");
-    }
+    $(els).filter((_, el) => $(el).css("animation")).css("animation", "none")
     // Check if opacity is directly in style
-    if (el.style.opacity) {
-        $(el).css("opacity", "");
-    }
+    $(els).filter((_, el) => el.style.opacity).css("opacity", "")
 }
+
+function fixElementFixed(els) {
+    if (!els.length) {
+        return;
+    }
+    let selectors = els.map(el => selectorGenerator.getSelector(el));
+    css = selectors.join(',') + ' { position: static !IMPORTANT; }',
+        head = document.head || document.getElementsByTagName('head')[0],
+        style = document.createElement('style');
+    if (styleFixElement) {
+        head.removeChild(styleFixElement);
+    }
+    style.type = 'text/css';
+    style.appendChild(document.createTextNode(css));
+    styleFixElement = style;
+    head.appendChild(style);
+}
+
 
 function doAll() {
     log("scrolled")
-    var foundNewInVicinity = false;
+    let foundNewInVicinity = false;
 
     function explore(headers) {
         for (var i = 0; i < headers.length; i++) {
@@ -108,7 +124,7 @@ function doAll() {
         var allCoords = topRow.concat(bottomRow);
         var initial = _.uniq(allCoords.map(([x, y]) => elementFromPoint(x, y, true)));
         log("Checking " + initial.length + " elements")
-        exploredHeaders = filterHeaders(initial);
+        exploredHeaders = _.uniq(filterHeaders(initial));
     }
     [exploredHeaders, removed] = _.partition(exploredHeaders, el => document.body.contains(el));
     if (removed.length) {
@@ -119,7 +135,8 @@ function doAll() {
     exploredHeaders = explore(exploredHeaders);
 
     // Some explored headers are no longer fixed, retain them just in case
-    exploredHeaders.filter(isFixed).filter(el => classify(el) != "sidebar").forEach(fixElementOpacity);
+    let toFix = exploredHeaders.filter(isFixed).filter(el => classify(el) != "sidebar");
+    fixElementOpacity(toFix);
     log(exploredHeaders);
 }
 
