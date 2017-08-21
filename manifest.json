@@ -13,9 +13,6 @@
   "content_scripts": [
     {
       "matches": [ "http://*/*", "https://*/*" ] ,
-      "css": [
-        "styles.css"
-      ],
       "js": [
         "lib/jquery-3.1.1.js",
         "lib/modernizr-3.5.0.js",

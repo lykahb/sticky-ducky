@@ -9,7 +9,7 @@ let styleFixElement = null;
 
 function log(...args) {
     if (isDevelopment) {
-        console.log("remove headers: ", ...args)
+        console.log("remove headers: ", ...args);
     }
 }
 
@@ -63,27 +63,18 @@ function exploreInVicinity(el) {
         middleX = rect.left + rect.width / 2,
         middleY = rect.top + rect.height / 2,
 
-        coords = [[middleX, rect.top - 5], [middleX, rect.bottom + 5],
-            [rect.left - 5, middleY], [rect.right + 5, middleY], [middleX, middleY]];
+        coords = [[middleX, rect.top - 2], [middleX, rect.bottom + 2],
+            [rect.left - 2, middleY], [rect.right + 2, middleY], [middleX, middleY]];
 
     return coords.map(([x, y]) => elementFromPoint(x, y)).filter(Boolean);
 }
 
+// Opacity is the best way to fix the headers. Setting position to fixed breaks some layouts
 function fixElementOpacity(els) {
-    // Specificity is too low if other classes override opacity
-    $(els).addClass("RemoveHeaderExtension");
-    // In case the header has animation keyframes involving opacity
-    $(els).filter((_, el) => $(el).css("animation")).css("animation", "none");
-    // Check if opacity is directly in style
-    $(els).filter((_, el) => el.style.opacity).css("opacity", "")
-}
-
-function fixElementFixed(els) {
-    if (!els.length) {
-        return;
-    }
+    // In case the header has animation keyframes involving opacity, set animation to none
     let selectors = els.map(el => selectorGenerator.getSelector(el)),
-        css = `${selectors.join(',')} { position: static !IMPORTANT; }`,
+        css = [`${selectors.join(',')} { opacity: 0 !IMPORTANT; transition: opacity 0.5s ease-in-out; animation: none; }`,
+            `${selectors.map(s => s + ':hover').join(',')} { opacity: 1 !important; }`].join('\n'),
         head = document.head || document.getElementsByTagName('head')[0],
         style = document.createElement('style');
     if (styleFixElement) {
@@ -93,19 +84,19 @@ function fixElementFixed(els) {
     style.appendChild(document.createTextNode(css));
     styleFixElement = style;
     head.appendChild(style);
+    // Check if opacity is directly in style. DOM changes don't work well with reactive websites
+    $(els).filter((_, el) => el.style.opacity).css("opacity", "")
 }
-
 
 function doAll() {
     log("scrolled");
-    let foundNewInVicinity = false;
 
+    // TODO: Store old bounding rect since after changing position it is no longer useful
     function explore(headers) {
         for (const header of headers) {
             const explored = _.uniq(filterHeaders(exploreInVicinity(header))),
                 newHeaders = _.difference(explored, headers);
             if (newHeaders.length > 0) {
-                foundNewInVicinity = true;
                 headers = headers.concat(newHeaders);
             }
         }
@@ -126,17 +117,22 @@ function doAll() {
         log(`Checking ${initial.length} elements`);
         exploredHeaders = _.uniq(filterHeaders(initial));
     }
+    // TODO: removed is a global variable here
     [exploredHeaders, removed] = _.partition(exploredHeaders, el => document.body.contains(el));
     if (removed.length) {
-        log("Removed from DOM: ", removed)
+        log("Removed from DOM: ", removed);
     }
 
     // explore again
     exploredHeaders = explore(exploredHeaders);
 
     // Some explored headers are no longer fixed, retain them just in case
+    // TODO: check for opacity since fixed is not removed
     let toFix = exploredHeaders.filter(isFixed).filter(el => classify(el) !== "sidebar");
-    fixElementOpacity(toFix);
+    if (toFix.length) {
+        log("Fixing: ", toFix);
+        fixElementOpacity(toFix);
+    }
     log(exploredHeaders);
 }
 
