@@ -19,7 +19,8 @@
         "lib/underscore-1.8.3.js",
         "lib/css-selector-generator-1.0.4.js",
         "content.js"
-      ]
+      ],
+      "run_at": "document_start"
     }
   ]
 }

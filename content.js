@@ -1,11 +1,10 @@
 // TODO: do not hide header when it would be regularly shown
-// Detect reactive frameworks by listening to mutations
-// Create unique CSS path to the element and inject style so that it is not modified
+// Options: show on hover, show on scroll up (Headroom), hide
 const isDevelopment = true;
 
 let exploredSticky = [];
 let selectorGenerator = new CssSelectorGenerator();
-let styleFixElement = null;
+let stylesheet = null;
 
 function log(...args) {
     if (isDevelopment) {
@@ -25,7 +24,7 @@ function classify(el) {
         clientWidth = document.documentElement.clientWidth,
         clientHeight = document.documentElement.clientHeight;
 
-    if (rect.width / clientWidth > 0.25) {
+    if (rect.width / clientWidth > 0.35) {
         if (rect.height / clientHeight < 0.25) {
             return rect.top / clientHeight < 0.25 ? "header" : "footer";
         } else {
@@ -63,8 +62,8 @@ function exploreInVicinity(el) {
         middleX = rect.left + rect.width / 2,
         middleY = rect.top + rect.height / 2,
         // TODO: use more dense samples
-        coords = [[middleX, rect.top - 2], [middleX, rect.bottom + 2],
-            [rect.left - 2, middleY], [rect.right + 2, middleY], [middleX, middleY]];
+        coords = [[middleX, rect.top - 5], [middleX, rect.bottom + 5],
+            [rect.left - 5, middleY], [rect.right + 5, middleY], [middleX, middleY]];
 
     return _.uniq(coords.map(([x, y]) => elementFromPoint(x, y)).filter(Boolean));
 }
@@ -72,18 +71,20 @@ function exploreInVicinity(el) {
 // Opacity is the best way to fix the headers. Setting position to fixed breaks some layouts
 function fixElementOpacity(stickies) {
     // In case the header has animation keyframes involving opacity, set animation to none
-    let selectors = stickies.map(s => selectorGenerator.getSelector(s.el)),
-        css = [`${selectors.join(',')} { opacity: 0 !IMPORTANT; transition: opacity 0.5s ease-in-out; animation: none; }`,
-            `${selectors.map(s => s + ':hover').join(',')} { opacity: 1 !important; }`].join('\n'),
-        head = document.head || document.getElementsByTagName('head')[0],
-        style = document.createElement('style');
-    if (styleFixElement) {
-        head.removeChild(styleFixElement);
+    let selectors = stickies.map(s => s.selector || (s.selector = selectorGenerator.getSelector(s.el))),
+        smoothCss = [`${selectors.join(',')} { opacity: 0 !IMPORTANT; animation: none; transition: opacity 0.5s ease-in-out; }`,
+            `${selectors.map(s => s + ':hover').join(',')} { opacity: 1 !IMPORTANT; }`];
+    if (!stylesheet) {
+        let styleFixElement = document.createElement('style');
+        styleFixElement.type = 'text/css';
+        document.head.appendChild(styleFixElement);
+        stylesheet = styleFixElement.sheet;
     }
-    style.type = 'text/css';
-    style.appendChild(document.createTextNode(css));
-    styleFixElement = style;
-    head.appendChild(style);
+    while (stylesheet.cssRules.length) {
+        stylesheet.deleteRule(0);
+    }
+    smoothCss.forEach(rule => stylesheet.insertRule(rule, 0));
+
     // Check if opacity is directly in style. DOM changes don't work well with reactive websites
     $(stickies).filter((_, s) => s.el.style.opacity).css("opacity", "")
 }
@@ -98,7 +99,7 @@ function doAll() {
                 bottomRow = _.range(0, 1, 0.1).map(x => [x, 0.95]),
                 allCoords = topRow.concat(bottomRow),
                 initial = _.uniq(allCoords.map(([x, y]) => elementFromPoint(x, y, true)));
-            log(`Checking ${initial.length} elements`);
+            log(`Checking ${initial.length} elements`, initial);
             stickies = filterSticky(initial);
         }
 
@@ -143,14 +144,10 @@ function doAll() {
             s.isFixed = true
         })
     }
-    log(exploredSticky);
+    log("exploredSticky", exploredSticky);
 }
 
-if (document.readyState === "interactive" || document.readyState === "complete") {
-    doAll();
-} else {
-    document.addEventListener('DOMContentLoaded', doAll, false);
-}
+document.addEventListener('DOMContentLoaded', doAll, false);
 
 // TODO: repeat doAll on scroll until one screen is scrolled
 function onScroll() {
