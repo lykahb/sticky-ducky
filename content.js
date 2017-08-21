@@ -3,7 +3,7 @@
 // Create unique CSS path to the element and inject style so that it is not modified
 const isDevelopment = true;
 
-let exploredHeaders = [];
+let exploredSticky = [];
 let selectorGenerator = new CssSelectorGenerator();
 let styleFixElement = null;
 
@@ -62,17 +62,17 @@ function exploreInVicinity(el) {
     const rect = el.getBoundingClientRect(),
         middleX = rect.left + rect.width / 2,
         middleY = rect.top + rect.height / 2,
-
+        // TODO: use more dense samples
         coords = [[middleX, rect.top - 2], [middleX, rect.bottom + 2],
             [rect.left - 2, middleY], [rect.right + 2, middleY], [middleX, middleY]];
 
-    return coords.map(([x, y]) => elementFromPoint(x, y)).filter(Boolean);
+    return _.uniq(coords.map(([x, y]) => elementFromPoint(x, y)).filter(Boolean));
 }
 
 // Opacity is the best way to fix the headers. Setting position to fixed breaks some layouts
-function fixElementOpacity(els) {
+function fixElementOpacity(stickies) {
     // In case the header has animation keyframes involving opacity, set animation to none
-    let selectors = els.map(el => selectorGenerator.getSelector(el)),
+    let selectors = stickies.map(s => selectorGenerator.getSelector(s.el)),
         css = [`${selectors.join(',')} { opacity: 0 !IMPORTANT; transition: opacity 0.5s ease-in-out; animation: none; }`,
             `${selectors.map(s => s + ':hover').join(',')} { opacity: 1 !important; }`].join('\n'),
         head = document.head || document.getElementsByTagName('head')[0],
@@ -85,55 +85,65 @@ function fixElementOpacity(els) {
     styleFixElement = style;
     head.appendChild(style);
     // Check if opacity is directly in style. DOM changes don't work well with reactive websites
-    $(els).filter((_, el) => el.style.opacity).css("opacity", "")
+    $(stickies).filter((_, s) => s.el.style.opacity).css("opacity", "")
 }
 
 function doAll() {
     log("scrolled");
 
-    // TODO: Store old bounding rect since after changing position it is no longer useful
-    function explore(headers) {
-        for (const header of headers) {
-            const explored = _.uniq(filterHeaders(exploreInVicinity(header))),
-                newHeaders = _.difference(explored, headers);
-            if (newHeaders.length > 0) {
-                headers = headers.concat(newHeaders);
-            }
+    function explore(stickies) {
+        if (stickies.length === 0) {
+            // There may be several fixed headers, one below another, and directly under (z-indexed).
+            let topRow = _.range(0, 1, 0.1).map(x => [x, 0.01]),
+                bottomRow = _.range(0, 1, 0.1).map(x => [x, 0.95]),
+                allCoords = topRow.concat(bottomRow),
+                initial = _.uniq(allCoords.map(([x, y]) => elementFromPoint(x, y, true)));
+            log(`Checking ${initial.length} elements`);
+            stickies = filterSticky(initial);
         }
 
-        return headers;
+        let allEls = _.pluck(stickies, 'el');
+        for (let i = 0; i < stickies.length; i++) {
+            let explored = filterSticky(exploreInVicinity(stickies[i].el))
+                .filter(s => !allEls.includes(s.el));
+            if (explored.length > 0) {
+                allEls = allEls.concat(_.pluck(explored, 'el'));
+                stickies = stickies.concat(explored);
+            }
+        }
+        return stickies;
     }
 
-    function filterHeaders(headers) {
-        return headers.map(el => el && parentChain(el, isFixed)).filter(Boolean)
+    // TODO: Store old bounding rect since after changing position it is no longer useful
+    function filterSticky(els) {
+        return _.uniq(els.map(el => el && parentChain(el, isFixed))
+            .filter(Boolean))
+            .map(el => ({
+                el: el,
+                isFixed: false,
+                type: classify(el)
+            }))
     }
 
-    if (exploredHeaders.length === 0) {
-        // There may be several fixed headers, one below another, and directly under (z-indexed).
-        let topRow = _.range(0, 1, 0.1).map(x => [x, 0.01]),
-            bottomRow = _.range(0, 1, 0.1).map(x => [x, 0.95]),
-            allCoords = topRow.concat(bottomRow),
-            initial = _.uniq(allCoords.map(([x, y]) => elementFromPoint(x, y, true)));
-        log(`Checking ${initial.length} elements`);
-        exploredHeaders = _.uniq(filterHeaders(initial));
-    }
     // TODO: removed is a global variable here
-    [exploredHeaders, removed] = _.partition(exploredHeaders, el => document.body.contains(el));
+    [exploredSticky, removed] = _.partition(exploredSticky, s => document.body.contains(s.el));
     if (removed.length) {
         log("Removed from DOM: ", removed);
     }
 
-    // explore again
-    exploredHeaders = explore(exploredHeaders);
+    exploredSticky = explore(exploredSticky);
 
     // Some explored headers are no longer fixed, retain them just in case
-    // TODO: check for opacity since fixed is not removed
-    let toFix = exploredHeaders.filter(isFixed).filter(el => classify(el) !== "sidebar");
-    if (toFix.length) {
+    let toFix = exploredSticky.filter(s => s.type !== 'sidebar'),
+        fixNeeded = toFix.some(s => !s.isFixed);
+    if (fixNeeded) {
         log("Fixing: ", toFix);
         fixElementOpacity(toFix);
+        toFix.forEach(s => {
+            s.isFixed = true
+        })
     }
-    log(exploredHeaders);
+    log(exploredSticky);
 }
 
 if (document.readyState === "interactive" || document.readyState === "complete") {
