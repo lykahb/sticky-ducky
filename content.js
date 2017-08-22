@@ -15,7 +15,7 @@ class StickyFixer {
     fixElementOpacity(stickies) {
         log("Fixing: ", stickies);
         // Check if opacity is directly in style. DOM changes don't work well with reactive websites
-        $(stickies).filter((_, s) => s.el.style.opacity).css("opacity", "")
+        stickies.filter(s => s.el.style.opacity).forEach(s => s.el.style.opacity = "");
     }
 
     updateStylesheetOnscroll(stickies, forceUpdate) {

@@ -10,7 +10,6 @@
     {
       "matches": [ "http://*/*", "https://*/*" ] ,
       "js": [
-        "lib/jquery-3.1.1.js",
         "lib/modernizr-3.5.0.js",
         "lib/underscore-1.8.3.js",
         "lib/css-selector-generator-1.0.4.js",
