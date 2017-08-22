@@ -24,9 +24,9 @@ class StickyFixer {
         let shouldHide = document.body.scrollTop / document.documentElement.clientHeight > 0.25;
         if (shouldHide !== this.hidden || stickies.some(s => !s.isFixed)) {
             let css = shouldHide ?
-                [`${selectors.join(',')} { opacity: 0 !IMPORTANT; animation: none; transition: opacity 0.5s ease-in-out; }`,
+                [`${selectors.join(',')} { opacity: 0 !IMPORTANT; animation: none; transition: opacity 0.3s ease-in-out; }`,
                     `${selectors.map(s => s + ':hover').join(',')} { opacity: 1 !IMPORTANT; }`] :
-                [`${selectors.join(',')} { opacity: 1 !IMPORTANT; animation: none; transition: opacity 0.5s ease-in-out; }`]
+                [`${selectors.join(',')} { opacity: 1 !IMPORTANT; animation: none; transition: opacity 0.3s ease-in-out; }`];
             this.updateStylesheet(css);
             stickies.forEach(s => {
                 s.isFixed = true;
@@ -37,10 +37,10 @@ class StickyFixer {
 
     updateStylesheet(rules) {
         if (!this.stylesheet) {
-            let styleFixElement = document.createElement('style');
-            styleFixElement.type = 'text/css';
-            document.head.appendChild(styleFixElement);
-            this.stylesheet = styleFixElement.sheet;
+            let style = document.createElement('style');
+            style.type = 'text/css';
+            document.head.appendChild(style);
+            this.stylesheet = style.sheet;
         }
         while (this.stylesheet.cssRules.length) {
             this.stylesheet.deleteRule(0);
