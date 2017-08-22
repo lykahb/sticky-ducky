@@ -1,10 +1,65 @@
 // TODO: do not hide header when it would be regularly shown
 // Options: show on hover, show on scroll up (Headroom), hide
 const isDevelopment = true;
+// Exploring elements is costly. After some scrolling around, it can be stopped
+let explorationsLimit = 2;
+
+class StickyFixer {
+    constructor() {
+        this.selectorGenerator = new CssSelectorGenerator();
+        this.stylesheet = null;
+        this.hidden = false;
+    }
+
+    // Opacity is the best way to fix the headers. Setting position to fixed breaks some layouts
+    fixElementOpacity(stickies) {
+        log("Fixing: ", stickies);
+        // Check if opacity is directly in style. DOM changes don't work well with reactive websites
+        $(stickies).filter((_, s) => s.el.style.opacity).css("opacity", "")
+    }
+
+    updateStylesheetOnscroll(stickies) {
+        // In case the header has animation keyframes involving opacity, set animation to none
+        let selectors = stickies.map(s => s.selector || (s.selector = this.selectorGenerator.getSelector(s.el)));
+        let shouldHide = document.body.scrollTop / document.documentElement.clientHeight > 0.25;
+        if (shouldHide !== this.hidden || stickies.some(s => !s.isFixed)) {
+            let css = shouldHide ?
+                [`${selectors.join(',')} { opacity: 0 !IMPORTANT; animation: none; transition: opacity 0.5s ease-in-out; }`,
+                    `${selectors.map(s => s + ':hover').join(',')} { opacity: 1 !IMPORTANT; }`] :
+                [`${selectors.join(',')} { opacity: 1 !IMPORTANT; animation: none; transition: opacity 0.5s ease-in-out; }`]
+            this.updateStylesheet(css);
+            stickies.forEach(s => {
+                s.isFixed = true;
+            });
+        }
+        this.hidden = shouldHide;
+    }
+
+    updateStylesheet(rules) {
+        if (!this.stylesheet) {
+            let styleFixElement = document.createElement('style');
+            styleFixElement.type = 'text/css';
+            document.head.appendChild(styleFixElement);
+            this.stylesheet = styleFixElement.sheet;
+        }
+        while (this.stylesheet.cssRules.length) {
+            this.stylesheet.deleteRule(0);
+        }
+        rules.forEach(rule => this.stylesheet.insertRule(rule, 0));
+    }
+
+    updateFixerOnScroll(stickies) {
+        let toFix = exploredSticky.filter(s => s.type !== 'sidebar'),
+            fixNeeded = toFix.some(s => !s.isFixed);
+        if (fixNeeded) {
+            this.fixElementOpacity(toFix);
+        }
+        this.updateStylesheetOnscroll(stickies);
+    }
+}
 
 let exploredSticky = [];
-let selectorGenerator = new CssSelectorGenerator();
-let stylesheet = null;
+let stickyFixer = new StickyFixer();
 
 function log(...args) {
     if (isDevelopment) {
@@ -68,54 +123,7 @@ function exploreInVicinity(el) {
     return _.uniq(coords.map(([x, y]) => elementFromPoint(x, y)).filter(Boolean));
 }
 
-// Opacity is the best way to fix the headers. Setting position to fixed breaks some layouts
-function fixElementOpacity(stickies) {
-    // In case the header has animation keyframes involving opacity, set animation to none
-    let selectors = stickies.map(s => s.selector || (s.selector = selectorGenerator.getSelector(s.el))),
-        smoothCss = [`${selectors.join(',')} { opacity: 0 !IMPORTANT; animation: none; transition: opacity 0.5s ease-in-out; }`,
-            `${selectors.map(s => s + ':hover').join(',')} { opacity: 1 !IMPORTANT; }`];
-    if (!stylesheet) {
-        let styleFixElement = document.createElement('style');
-        styleFixElement.type = 'text/css';
-        document.head.appendChild(styleFixElement);
-        stylesheet = styleFixElement.sheet;
-    }
-    while (stylesheet.cssRules.length) {
-        stylesheet.deleteRule(0);
-    }
-    smoothCss.forEach(rule => stylesheet.insertRule(rule, 0));
-
-    // Check if opacity is directly in style. DOM changes don't work well with reactive websites
-    $(stickies).filter((_, s) => s.el.style.opacity).css("opacity", "")
-}
-
-function doAll() {
-    log("scrolled");
-
-    function explore(stickies) {
-        if (stickies.length === 0) {
-            // There may be several fixed headers, one below another, and directly under (z-indexed).
-            let topRow = _.range(0, 1, 0.1).map(x => [x, 0.01]),
-                bottomRow = _.range(0, 1, 0.1).map(x => [x, 0.95]),
-                allCoords = topRow.concat(bottomRow),
-                initial = _.uniq(allCoords.map(([x, y]) => elementFromPoint(x, y, true)));
-            log(`Checking ${initial.length} elements`, initial);
-            stickies = filterSticky(initial);
-        }
-
-        let allEls = _.pluck(stickies, 'el');
-        for (let i = 0; i < stickies.length; i++) {
-            let explored = filterSticky(exploreInVicinity(stickies[i].el))
-                .filter(s => !allEls.includes(s.el));
-            if (explored.length > 0) {
-                allEls = allEls.concat(_.pluck(explored, 'el'));
-                stickies = stickies.concat(explored);
-            }
-        }
-        return stickies;
-    }
-
-    // TODO: Store old bounding rect since after changing position it is no longer useful
+function explore(stickies) {
     function filterSticky(els) {
         return _.uniq(els.map(el => el && parentChain(el, isFixed))
             .filter(Boolean))
@@ -126,24 +134,41 @@ function doAll() {
             }))
     }
 
-    // TODO: removed is a global variable here
-    [exploredSticky, removed] = _.partition(exploredSticky, s => document.body.contains(s.el));
-    if (removed.length) {
-        log("Removed from DOM: ", removed);
+    if (stickies.length === 0) {
+        // There may be several fixed headers, one below another, and directly under (z-indexed).
+        let topRow = _.range(0, 1, 0.1).map(x => [x, 0.01]),
+            bottomRow = _.range(0, 1, 0.1).map(x => [x, 0.95]),
+            allCoords = topRow.concat(bottomRow),
+            initial = _.uniq(allCoords.map(([x, y]) => elementFromPoint(x, y, true)));
+        log(`Checking ${initial.length} elements`, initial);
+        stickies = filterSticky(initial);
     }
 
-    exploredSticky = explore(exploredSticky);
-
-    // Some explored headers are no longer fixed, retain them just in case
-    let toFix = exploredSticky.filter(s => s.type !== 'sidebar'),
-        fixNeeded = toFix.some(s => !s.isFixed);
-    if (fixNeeded) {
-        log("Fixing: ", toFix);
-        fixElementOpacity(toFix);
-        toFix.forEach(s => {
-            s.isFixed = true
-        })
+    let allEls = _.pluck(stickies, 'el');
+    for (let i = 0; i < stickies.length; i++) {
+        let explored = filterSticky(exploreInVicinity(stickies[i].el))
+            .filter(s => !allEls.includes(s.el));
+        if (explored.length > 0) {
+            allEls = allEls.concat(_.pluck(explored, 'el'));
+            stickies = stickies.concat(explored);
+        }
     }
+    return stickies;
+}
+
+function doAll() {
+    let activeRomoved = _.partition(exploredSticky, s => document.body.contains(s.el));
+    if (activeRomoved[1].length) {
+        log("Removed from DOM: ", activeRomoved[1]);
+        exploredSticky = activeRomoved[0];
+    }
+    if (explorationsLimit) {
+        exploredSticky = explore(exploredSticky);
+    }
+    if (window.scrollY > document.documentElement.clientHeight) {
+        explorationsLimit--;
+    }
+    stickyFixer.updateFixerOnScroll(exploredSticky);
     log("exploredSticky", exploredSticky);
 }
 
@@ -151,11 +176,7 @@ document.addEventListener('DOMContentLoaded', doAll, false);
 
 // TODO: repeat doAll on scroll until one screen is scrolled
 function onScroll() {
-    if (window.scrollY > document.documentElement.clientHeight) {
-        // Assume that the dynamic header appeared and was processed once the document has been scrolled far enough
-        log("Scrolled far");
-        window.removeEventListener("scroll", onScroll, false);
-    }
+
     doAll();
 }
 
