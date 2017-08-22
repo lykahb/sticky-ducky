@@ -21,8 +21,8 @@ class StickyFixer {
     updateStylesheetOnscroll(stickies) {
         // In case the header has animation keyframes involving opacity, set animation to none
         let selectors = stickies.map(s => s.selector || (s.selector = this.selectorGenerator.getSelector(s.el)));
-        let shouldHide = document.body.scrollTop / document.documentElement.clientHeight > 0.25;
-        if (shouldHide !== this.hidden || stickies.some(s => !s.isFixed)) {
+        let shouldHide = document.body.scrollTop / document.documentElement.clientHeight > 0.15;
+        if (selectors.length && (shouldHide !== this.hidden || stickies.some(s => !s.isFixed))) {
             let css = shouldHide ?
                 [`${selectors.join(',')} { opacity: 0 !IMPORTANT; animation: none; transition: opacity 0.3s ease-in-out; }`,
                     `${selectors.map(s => s + ':hover').join(',')} { opacity: 1 !IMPORTANT; }`] :
@@ -73,10 +73,9 @@ function isFixed(el) {
     return window.getComputedStyle(el).position === "fixed";
 }
 
-function classify(el) {
+function classify(rect) {
     // header, footer, splash, widget, sidebar
-    const rect = el.getBoundingClientRect(),
-        clientWidth = document.documentElement.clientWidth,
+    const clientWidth = document.documentElement.clientWidth,
         clientHeight = document.documentElement.clientHeight;
 
     if (rect.width / clientWidth > 0.35) {
@@ -112,9 +111,8 @@ function parentChain(el, pred) {
     }
 }
 
-function exploreInVicinity(el) {
-    const rect = el.getBoundingClientRect(),
-        middleX = rect.left + rect.width / 2,
+function exploreInVicinity(rect) {
+    const middleX = rect.left + rect.width / 2,
         middleY = rect.top + rect.height / 2,
         // TODO: use more dense samples
         coords = [[middleX, rect.top - 5], [middleX, rect.bottom + 5],
@@ -124,15 +122,11 @@ function exploreInVicinity(el) {
 }
 
 function explore(stickies) {
-    function filterSticky(els) {
-        return _.uniq(els.map(el => el && parentChain(el, isFixed))
-            .filter(Boolean))
-            .map(el => ({
-                el: el,
-                isFixed: false,
-                type: classify(el)
-            }))
-    }
+    let filterSticky = els => _.uniq(els.map(el => el && parentChain(el, isFixed)).filter(Boolean));
+    let makeStickyObj = el => {
+        let rect = el.getBoundingClientRect();
+        return {el: el, isFixed: false, rect: rect, type: classify(rect)};
+    };
 
     if (stickies.length === 0) {
         // There may be several fixed headers, one below another, and directly under (z-indexed).
@@ -141,16 +135,15 @@ function explore(stickies) {
             allCoords = topRow.concat(bottomRow),
             initial = _.uniq(allCoords.map(([x, y]) => elementFromPoint(x, y, true)));
         log(`Checking ${initial.length} elements`, initial);
-        stickies = filterSticky(initial);
+        stickies = filterSticky(initial).map(makeStickyObj);
     }
 
     let allEls = _.pluck(stickies, 'el');
     for (let i = 0; i < stickies.length; i++) {
-        let explored = filterSticky(exploreInVicinity(stickies[i].el))
-            .filter(s => !allEls.includes(s.el));
+        let explored = _.difference(filterSticky(exploreInVicinity(stickies[i].rect)), allEls);
         if (explored.length > 0) {
-            allEls = allEls.concat(_.pluck(explored, 'el'));
-            stickies = stickies.concat(explored);
+            allEls = allEls.concat(explored);
+            stickies = stickies.concat(explored.map(makeStickyObj));
         }
     }
     return stickies;
@@ -164,20 +157,14 @@ function doAll() {
     }
     if (explorationsLimit) {
         exploredSticky = explore(exploredSticky);
+        log("exploredSticky", exploredSticky);
     }
-    if (window.scrollY > document.documentElement.clientHeight) {
+    if (explorationsLimit > 0 && window.scrollY > document.documentElement.clientHeight) {
+        log(`decrement ${explorationsLimit}`);
         explorationsLimit--;
     }
     stickyFixer.updateFixerOnScroll(exploredSticky);
-    log("exploredSticky", exploredSticky);
 }
 
 document.addEventListener('DOMContentLoaded', doAll, false);
-
-// TODO: repeat doAll on scroll until one screen is scrolled
-function onScroll() {
-
-    doAll();
-}
-
-window.addEventListener("scroll", onScroll, Modernizr.passiveeventlisteners ? {passive: true} : false);
+window.addEventListener("scroll", doAll, Modernizr.passiveeventlisteners ? {passive: true} : false);
