@@ -18,21 +18,18 @@ class StickyFixer {
         $(stickies).filter((_, s) => s.el.style.opacity).css("opacity", "")
     }
 
-    updateStylesheetOnscroll(stickies) {
+    updateStylesheetOnscroll(stickies, forceUpdate) {
         // In case the header has animation keyframes involving opacity, set animation to none
         let selectors = stickies.map(s => s.selector || (s.selector = this.selectorGenerator.getSelector(s.el)));
         let shouldHide = document.body.scrollTop / document.documentElement.clientHeight > 0.15;
-        if (selectors.length && (shouldHide !== this.hidden || stickies.some(s => !s.isFixed))) {
+        if (forceUpdate || selectors.length && shouldHide !== this.hidden) {
             let css = shouldHide ?
                 [`${selectors.join(',')} { opacity: 0 !IMPORTANT; animation: none; transition: opacity 0.3s ease-in-out; }`,
                     `${selectors.map(s => s + ':hover').join(',')} { opacity: 1 !IMPORTANT; }`] :
                 [`${selectors.join(',')} { opacity: 1 !IMPORTANT; animation: none; transition: opacity 0.3s ease-in-out; }`];
             this.updateStylesheet(css);
-            stickies.forEach(s => {
-                s.isFixed = true;
-            });
+            this.hidden = shouldHide;
         }
-        this.hidden = shouldHide;
     }
 
     updateStylesheet(rules) {
@@ -48,17 +45,16 @@ class StickyFixer {
         rules.forEach(rule => this.stylesheet.insertRule(rule, 0));
     }
 
-    updateFixerOnScroll(stickies) {
-        let toFix = exploredSticky.filter(s => s.type !== 'sidebar'),
-            fixNeeded = toFix.some(s => !s.isFixed);
-        if (fixNeeded) {
+    updateFixerOnScroll(stickies, newFound) {
+        let toFix = stickies.filter(s => s.type !== 'sidebar');
+        if (newFound) {
             this.fixElementOpacity(toFix);
         }
-        this.updateStylesheetOnscroll(stickies);
+        this.updateStylesheetOnscroll(toFix, newFound);
     }
 }
 
-let exploredSticky = [];
+let exploredStickies = [];
 let stickyFixer = new StickyFixer();
 
 function log(...args) {
@@ -125,7 +121,15 @@ function explore(stickies) {
     let filterSticky = els => _.uniq(els.map(el => el && parentChain(el, isFixed)).filter(Boolean));
     let makeStickyObj = el => {
         let rect = el.getBoundingClientRect();
-        return {el: el, isFixed: false, rect: rect, type: classify(rect)};
+        return {el: el, rect: rect, type: classify(rect)};
+    };
+    let newStickies = [];
+    let allEls = _.pluck(stickies, 'el');
+    let addExploredEls = els => {
+        let newStickiesObj = els.map(makeStickyObj);
+        allEls = allEls.concat(els);
+        newStickies = newStickies.concat(newStickiesObj);
+        stickies = stickies.concat(newStickiesObj);
     };
 
     if (stickies.length === 0) {
@@ -135,35 +139,33 @@ function explore(stickies) {
             allCoords = topRow.concat(bottomRow),
             initial = _.uniq(allCoords.map(([x, y]) => elementFromPoint(x, y, true)));
         log(`Checking ${initial.length} elements`, initial);
-        stickies = filterSticky(initial).map(makeStickyObj);
+        addExploredEls(filterSticky(initial));
     }
 
-    let allEls = _.pluck(stickies, 'el');
     for (let i = 0; i < stickies.length; i++) {
-        let explored = _.difference(filterSticky(exploreInVicinity(stickies[i].rect)), allEls);
-        if (explored.length > 0) {
-            allEls = allEls.concat(explored);
-            stickies = stickies.concat(explored.map(makeStickyObj));
-        }
+        let newEls = _.difference(filterSticky(exploreInVicinity(stickies[i].rect)), allEls);
+        newEls.length && addExploredEls(newEls);
     }
-    return stickies;
+    return newStickies;
 }
 
 function doAll() {
-    let activeRomoved = _.partition(exploredSticky, s => document.body.contains(s.el));
+    let activeRomoved = _.partition(exploredStickies, s => document.body.contains(s.el));
     if (activeRomoved[1].length) {
         log("Removed from DOM: ", activeRomoved[1]);
-        exploredSticky = activeRomoved[0];
+        exploredStickies = activeRomoved[0];
     }
+    let newStickies = [];
     if (explorationsLimit) {
-        exploredSticky = explore(exploredSticky);
-        log("exploredSticky", exploredSticky);
+        newStickies = explore(exploredStickies);
+        exploredStickies = exploredStickies.concat(newStickies);
+        log("exploredStickies", exploredStickies);
     }
     if (explorationsLimit > 0 && window.scrollY > document.documentElement.clientHeight) {
         log(`decrement ${explorationsLimit}`);
         explorationsLimit--;
     }
-    stickyFixer.updateFixerOnScroll(exploredSticky);
+    stickyFixer.updateFixerOnScroll(exploredStickies, newStickies.length > 0);
 }
 
 document.addEventListener('DOMContentLoaded', doAll, false);
