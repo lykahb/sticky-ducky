@@ -91,10 +91,6 @@ function log(...args) {
 
 log('Script loaded');
 
-function isFixed(el) {
-    return window.getComputedStyle(el).position === "fixed";
-}
-
 function classify(rect) {
     // header, footer, splash, widget, sidebar
     const clientWidth = document.documentElement.clientWidth,
@@ -122,17 +118,6 @@ function elementFromPoint(x, y, isPercent) {
     return document.elementFromPoint(x, y);
 }
 
-function parentChain(el, pred) {
-    if (el.tagName !== "HTML") {
-        while (el.tagName !== "BODY") {
-            if (pred(el)) {
-                return el;
-            }
-            el = el.parentNode;
-        }
-    }
-}
-
 function exploreInVicinity(rect) {
     const middleX = rect.left + rect.width / 2,
         middleY = rect.top + rect.height / 2,
@@ -144,7 +129,14 @@ function exploreInVicinity(rect) {
 }
 
 function explore(stickies) {
-    let filterSticky = els => _.uniq(els.map(el => el && parentChain(el, isFixed)).filter(Boolean));
+    let parentSticky = el => {
+        for (; el && el.tagName !== "HTML"; el = el.parentNode) {
+            if (window.getComputedStyle(el).position === "fixed") {
+                return el;
+            }
+        }
+    };
+    let filterSticky = els => _.uniq(els.map(parentSticky).filter(Boolean));
     let makeStickyObj = el => {
         let rect = el.getBoundingClientRect();
         return {el: el, rect: rect, type: classify(rect)};
