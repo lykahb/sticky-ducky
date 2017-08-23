@@ -7,14 +7,16 @@ let explorationsLimit = 2;
 let exploredStickies = [];
 
 class StickyFixer {
-    constructor() {
+    constructor(shouldHide, toggle) {
         this.selectorGenerator = new CssSelectorGenerator();
         this.stylesheet = null;
         this.hidden = false;
+        this.shouldHide = shouldHide;
+        this.toggle = toggle;
     }
 
     updateStylesheetOnScroll(stickies, forceUpdate) {
-        let shouldHide = document.body.scrollTop / document.documentElement.clientHeight > 0.15;
+        let shouldHide = this.shouldHide();
         if (forceUpdate || stickies.length && shouldHide !== this.hidden) {
             let selectors = stickies.map(s => {
                 if (!s.selector || !this.selectorGenerator.testSelector(s.selector)) {
@@ -22,12 +24,7 @@ class StickyFixer {
                 }
                 return s.selector;
             });
-            // Opacity is the best way to fix the headers. Setting position to fixed breaks some layouts
-            let css = [`${selectors.join(',')} { transition: opacity 0.3s ease-in-out; }`];
-            if (shouldHide) {
-                // In case the header has animation keyframes involving opacity, set animation to none
-                css.push(`${selectors.map(s => s + ':not(:hover)').join(',')} { opacity: 0 !IMPORTANT; animation: none; }`);
-            }
+            let css = this.toggle(shouldHide, selectors);
             this.updateStylesheet(css);
             this.hidden = shouldHide;
         }
@@ -57,7 +54,34 @@ class StickyFixer {
     }
 }
 
-let stickyFixer = new StickyFixer();
+let hoverFixer = new StickyFixer(
+    () => document.body.scrollTop / document.documentElement.clientHeight > 0.15,
+    (shouldHide, selectors) => {
+        // Opacity is the best way to fix the headers. Setting position to fixed breaks some layouts
+        let css = [`${selectors.join(',')} { transition: opacity 0.3s ease-in-out; }`];
+        if (shouldHide) {
+            // In case the header has animation keyframes involving opacity, set animation to none
+            css.push(`${selectors.map(s => s + ':not(:hover)').join(',')} { opacity: 0 !IMPORTANT; animation: none; }`);
+        }
+        return css;
+    });
+
+let headroomFixer = new StickyFixer(
+    () => {
+        let lastKnownScrollY = this.lastKnownScrollY;
+        let currentScrollY = this.lastKnownScrollY = document.body.scrollTop;
+        let notOnTop = currentScrollY / document.documentElement.clientHeight > 0.15;
+        return notOnTop && (!lastKnownScrollY || currentScrollY >= lastKnownScrollY);
+    },
+    (shouldHide, selectors) => {
+        // Opacity is the best way to fix the headers. Setting position to fixed breaks some layouts
+        let css = [`${selectors.join(',')} { transition: opacity 0.3s ease-in-out; }`];
+        if (shouldHide) {
+            // In case the header has animation keyframes involving opacity, set animation to none
+            css.push(`${selectors.join(',')} { opacity: 0 !IMPORTANT; animation: none; }`);
+        }
+        return css;
+    });
 
 function log(...args) {
     if (isDevelopment) {
@@ -167,7 +191,7 @@ function doAll() {
         log(`decrement ${explorationsLimit}`);
         explorationsLimit--;
     }
-    stickyFixer.updateFixerOnScroll(exploredStickies, newStickies);
+    headroomFixer.updateFixerOnScroll(exploredStickies, newStickies);
 }
 
 document.addEventListener('DOMContentLoaded', doAll, false);
