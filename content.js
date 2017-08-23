@@ -18,11 +18,16 @@ class StickyFixer {
         stickies.filter(s => s.el.style.opacity).forEach(s => s.el.style.opacity = "");
     }
 
-    updateStylesheetOnscroll(stickies, forceUpdate) {
+    updateStylesheetOnScroll(stickies, forceUpdate) {
         // In case the header has animation keyframes involving opacity, set animation to none
-        let selectors = stickies.map(s => s.selector || (s.selector = this.selectorGenerator.getSelector(s.el)));
         let shouldHide = document.body.scrollTop / document.documentElement.clientHeight > 0.15;
-        if (forceUpdate || selectors.length && shouldHide !== this.hidden) {
+        if (forceUpdate || stickies.length && shouldHide !== this.hidden) {
+            let selectors = stickies.map(s => {
+                if (!s.selector || !this.selectorGenerator.testSelector(s.selector)) {
+                    s.selector = this.selectorGenerator.getSelector(s.el);
+                }
+                return s.selector;
+            });
             let css = shouldHide ?
                 [`${selectors.join(',')} { opacity: 0 !IMPORTANT; animation: none; transition: opacity 0.3s ease-in-out; }`,
                     `${selectors.map(s => s + ':hover').join(',')} { opacity: 1 !IMPORTANT; }`] :
@@ -45,12 +50,12 @@ class StickyFixer {
         rules.forEach(rule => this.stylesheet.insertRule(rule, 0));
     }
 
-    updateFixerOnScroll(stickies, newFound) {
+    updateFixerOnScroll(stickies, newStickies) {
         let toFix = stickies.filter(s => s.type !== 'sidebar');
-        if (newFound) {
+        if (newStickies.length) {
             this.fixElementOpacity(toFix);
         }
-        this.updateStylesheetOnscroll(toFix, newFound);
+        this.updateStylesheetOnScroll(toFix, newStickies.length);
     }
 }
 
@@ -165,7 +170,7 @@ function doAll() {
         log(`decrement ${explorationsLimit}`);
         explorationsLimit--;
     }
-    stickyFixer.updateFixerOnScroll(exploredStickies, newStickies.length > 0);
+    stickyFixer.updateFixerOnScroll(exploredStickies, newStickies);
 }
 
 document.addEventListener('DOMContentLoaded', doAll, false);
