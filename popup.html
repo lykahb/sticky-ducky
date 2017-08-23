@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Hide sticky elements</title>
+    <style>
+        body {
+            background-color: white;
+            color: black;
+            font-family: Helvetica, Arial, sans-serif;
+            font-size: 14px;
+            width: 200px;
+        }
+        #options {
+            display: flex;
+            flex-direction: column;
+        }
+        #options > .active {
+            background-color: rgba(0, 126, 186, 0.7);
+        }
+        #options > span {
+            line-height: 2em;
+            height: 2em;
+            padding-left: 1em;
+            margin-bottom: 0.5em;
+            background-color: rgba(96, 117, 128, 0.3);
+            cursor: default;
+        }
+    </style>
+</head>
+<body>
+<h1>Hide sticky elements</h1>
+<h3>When to show them:</h3>
+<div id="options">
+    <span data-behavior="hover">On hover (mouse over)</span>
+    <span data-behavior="scroll">On scroll up</span>
+    <span data-behavior="never">Never</span>
+</div>
+
+<script type="application/javascript" src="popup.js"></script>
+</body>
+</html>

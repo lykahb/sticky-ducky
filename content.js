@@ -1,10 +1,7 @@
-// TODO: do not hide header when it would be regularly shown
-// TODO: debounce scroll event
-// Options: show on hover, show on scroll up (Headroom), hide
 const isDevelopment = true;
-// Exploring elements is costly. After some scrolling around, it can be stopped
-let explorationsLimit = 2;
+let explorationsLimit = 2;  // Exploring elements is costly. After some scrolling around, it can be stopped
 let exploredStickies = [];
+let defaultFixer = 'hover';
 
 class StickyFixer {
     constructor(shouldHide, toggle) {
@@ -30,6 +27,8 @@ class StickyFixer {
         }
     }
 
+    // Opacity is the best way to fix the headers. Setting position to fixed breaks some layouts
+    // In case the header has animation keyframes involving opacity, set animation to none
     updateStylesheet(rules) {
         if (!this.stylesheet) {
             let style = document.createElement('style');
@@ -43,30 +42,27 @@ class StickyFixer {
         rules.forEach(rule => this.stylesheet.insertRule(rule, 0));
     }
 
-    updateFixerOnScroll(stickies, newStickies) {
+    updateFixerOnScroll(stickies, forceUpdate) {
         let toFix = stickies.filter(s => s.type !== 'sidebar');
-        if (newStickies.length) {
+        if (forceUpdate) {
             // Check if opacity is directly in style. DOM changes don't work well with reactive websites
             log("Fixing: ", toFix);
             toFix.filter(s => s.el.style.opacity).forEach(s => s.el.style.opacity = "");
         }
-        this.updateStylesheetOnScroll(toFix, newStickies.length);
+        this.updateStylesheetOnScroll(toFix, forceUpdate);
     }
 }
 
-let hoverFixer = new StickyFixer(
+let hoverFixer = () => new StickyFixer(
     () => document.body.scrollTop / document.documentElement.clientHeight > 0.15,
     (shouldHide, selectors) => {
-        // Opacity is the best way to fix the headers. Setting position to fixed breaks some layouts
         let css = [`${selectors.join(',')} { transition: opacity 0.3s ease-in-out; }`];
         if (shouldHide) {
-            // In case the header has animation keyframes involving opacity, set animation to none
             css.push(`${selectors.map(s => s + ':not(:hover)').join(',')} { opacity: 0 !IMPORTANT; animation: none; }`);
         }
         return css;
     });
-
-let headroomFixer = new StickyFixer(
+let scrollFixer = () => new StickyFixer(
     () => {
         let lastKnownScrollY = this.lastKnownScrollY;
         let currentScrollY = this.lastKnownScrollY = document.body.scrollTop;
@@ -74,22 +70,33 @@ let headroomFixer = new StickyFixer(
         return notOnTop && (!lastKnownScrollY || currentScrollY >= lastKnownScrollY);
     },
     (shouldHide, selectors) => {
-        // Opacity is the best way to fix the headers. Setting position to fixed breaks some layouts
         let css = [`${selectors.join(',')} { transition: opacity 0.3s ease-in-out; }`];
         if (shouldHide) {
-            // In case the header has animation keyframes involving opacity, set animation to none
             css.push(`${selectors.join(',')} { opacity: 0 !IMPORTANT; animation: none; }`);
         }
         return css;
     });
+let neverFixer = () => new StickyFixer(
+    () => document.body.scrollTop / document.documentElement.clientHeight > 0.15,
+    (shouldHide, selectors) => {
+        let css = [`${selectors.join(',')} { transition: opacity 0.3s ease-in-out; }`];
+        if (shouldHide) {
+            css.push(`${selectors.join(',')} { opacity: 0 !IMPORTANT; animation: none; }`);
+        }
+        return css;
+    });
+let stickyFixer = null;
+let fixers = {
+    'hover': hoverFixer,
+    'scroll': scrollFixer,
+    'never': neverFixer
+};
 
 function log(...args) {
     if (isDevelopment) {
         console.log("remove headers: ", ...args);
     }
 }
-
-log('Script loaded');
 
 function classify(rect) {
     // header, footer, splash, widget, sidebar
@@ -183,8 +190,23 @@ function doAll() {
         log(`decrement ${explorationsLimit}`);
         explorationsLimit--;
     }
-    headroomFixer.updateFixerOnScroll(exploredStickies, newStickies);
+    stickyFixer.updateFixerOnScroll(exploredStickies, newStickies.length > 0);
 }
 
-document.addEventListener('DOMContentLoaded', doAll, false);
-window.addEventListener("scroll", _.throttle(doAll, 100), Modernizr.passiveeventlisteners ? {passive: true} : false);
+chrome.storage.local.get('behavior', response => {
+    stickyFixer = fixers[response.behavior || defaultFixer]();
+    document.addEventListener('DOMContentLoaded', doAll, false);
+    window.addEventListener("scroll", _.throttle(doAll, 100), Modernizr.passiveeventlisteners ? {passive: true} : false);
+});
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    log(request);
+    if (request) {
+        let newFixer = fixers[request]();
+        newFixer.stylesheet = stickyFixer.stylesheet;
+        newFixer.hidden = stickyFixer.hidden;
+        stickyFixer = newFixer;
+        stickyFixer.updateFixerOnScroll(exploredStickies, true);
+        sendResponse('ok');
+    }
+});
