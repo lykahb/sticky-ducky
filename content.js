@@ -13,13 +13,6 @@ class StickyFixer {
         this.hidden = false;
     }
 
-    // Opacity is the best way to fix the headers. Setting position to fixed breaks some layouts
-    fixElementOpacity(stickies) {
-        log("Fixing: ", stickies);
-        // Check if opacity is directly in style. DOM changes don't work well with reactive websites
-        stickies.filter(s => s.el.style.opacity).forEach(s => s.el.style.opacity = "");
-    }
-
     updateStylesheetOnScroll(stickies, forceUpdate) {
         let shouldHide = document.body.scrollTop / document.documentElement.clientHeight > 0.15;
         if (forceUpdate || stickies.length && shouldHide !== this.hidden) {
@@ -29,6 +22,7 @@ class StickyFixer {
                 }
                 return s.selector;
             });
+            // Opacity is the best way to fix the headers. Setting position to fixed breaks some layouts
             let css = [`${selectors.join(',')} { transition: opacity 0.3s ease-in-out; }`];
             if (shouldHide) {
                 // In case the header has animation keyframes involving opacity, set animation to none
@@ -55,7 +49,9 @@ class StickyFixer {
     updateFixerOnScroll(stickies, newStickies) {
         let toFix = stickies.filter(s => s.type !== 'sidebar');
         if (newStickies.length) {
-            this.fixElementOpacity(toFix);
+            // Check if opacity is directly in style. DOM changes don't work well with reactive websites
+            log("Fixing: ", toFix);
+            toFix.filter(s => s.el.style.opacity).forEach(s => s.el.style.opacity = "");
         }
         this.updateStylesheetOnScroll(toFix, newStickies.length);
     }
