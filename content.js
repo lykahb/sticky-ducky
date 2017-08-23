@@ -21,7 +21,6 @@ class StickyFixer {
     }
 
     updateStylesheetOnScroll(stickies, forceUpdate) {
-        // In case the header has animation keyframes involving opacity, set animation to none
         let shouldHide = document.body.scrollTop / document.documentElement.clientHeight > 0.15;
         if (forceUpdate || stickies.length && shouldHide !== this.hidden) {
             let selectors = stickies.map(s => {
@@ -30,10 +29,11 @@ class StickyFixer {
                 }
                 return s.selector;
             });
-            let css = shouldHide ?
-                [`${selectors.join(',')} { opacity: 0 !IMPORTANT; animation: none; transition: opacity 0.3s ease-in-out; }`,
-                    `${selectors.map(s => s + ':hover').join(',')} { opacity: 1 !IMPORTANT; }`] :
-                [`${selectors.join(',')} { opacity: 1 !IMPORTANT; animation: none; transition: opacity 0.3s ease-in-out; }`];
+            let css = [`${selectors.join(',')} { transition: opacity 0.3s ease-in-out; }`];
+            if (shouldHide) {
+                // In case the header has animation keyframes involving opacity, set animation to none
+                css.push(`${selectors.map(s => s + ':not(:hover)').join(',')} { opacity: 0 !IMPORTANT; animation: none; }`);
+            }
             this.updateStylesheet(css);
             this.hidden = shouldHide;
         }
