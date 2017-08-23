@@ -1,8 +1,10 @@
 // TODO: do not hide header when it would be regularly shown
+// TODO: debounce scroll event
 // Options: show on hover, show on scroll up (Headroom), hide
 const isDevelopment = true;
 // Exploring elements is costly. After some scrolling around, it can be stopped
 let explorationsLimit = 2;
+let exploredStickies = [];
 
 class StickyFixer {
     constructor() {
@@ -59,7 +61,6 @@ class StickyFixer {
     }
 }
 
-let exploredStickies = [];
 let stickyFixer = new StickyFixer();
 
 function log(...args) {
@@ -174,4 +175,4 @@ function doAll() {
 }
 
 document.addEventListener('DOMContentLoaded', doAll, false);
-window.addEventListener("scroll", doAll, Modernizr.passiveeventlisteners ? {passive: true} : false);
+window.addEventListener("scroll", _.throttle(doAll, 100), Modernizr.passiveeventlisteners ? {passive: true} : false);
