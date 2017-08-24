@@ -21,7 +21,7 @@ class StickyFixer {
                 }
                 return s.selector;
             });
-            let css = this.toggle(shouldHide, selectors);
+            let css = this.toggle(selectors, shouldHide);
             this.updateStylesheet(css);
             this.hidden = shouldHide;
         }
@@ -55,13 +55,9 @@ class StickyFixer {
 
 let hoverFixer = () => new StickyFixer(
     () => document.body.scrollTop / document.documentElement.clientHeight > 0.15,
-    (shouldHide, selectors) => {
-        let css = [`${selectors.join(',')} { transition: opacity 0.3s ease-in-out; }`];
-        if (shouldHide) {
-            css.push(`${selectors.map(s => s + ':not(:hover)').join(',')} { opacity: 0 !IMPORTANT; animation: none; }`);
-        }
-        return css;
-    });
+    (selectors, shouldHide) => [shouldHide ?
+        selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0 !IMPORTANT; animation: none; transition: opacity 0.3s ease-in-out; }'
+        : selectors.join(',') + '{ transition: opacity 0.3s ease-in-out; }']);
 let scrollFixer = () => new StickyFixer(
     () => {
         let lastKnownScrollY = this.lastKnownScrollY;
@@ -69,22 +65,15 @@ let scrollFixer = () => new StickyFixer(
         let notOnTop = currentScrollY / document.documentElement.clientHeight > 0.15;
         return notOnTop && (!lastKnownScrollY || currentScrollY >= lastKnownScrollY);
     },
-    (shouldHide, selectors) => {
-        let css = [`${selectors.join(',')} { transition: opacity 0.3s ease-in-out; }`];
-        if (shouldHide) {
-            css.push(`${selectors.join(',')} { opacity: 0 !IMPORTANT; animation: none; }`);
-        }
-        return css;
-    });
+    (selectors, shouldHide) => [shouldHide ?
+        selectors.join(',') + '{ opacity: 0 !IMPORTANT; visibility: hidden; animation: none; transition: opacity 0.3s ease-in-out, visibility 0s 0.3s; }'
+        : selectors.join(',') + '{ transition: opacity 0.3s ease-in-out; }']);
 let neverFixer = () => new StickyFixer(
     () => document.body.scrollTop / document.documentElement.clientHeight > 0.15,
-    (shouldHide, selectors) => {
-        let css = [`${selectors.join(',')} { transition: opacity 0.3s ease-in-out; }`];
-        if (shouldHide) {
-            css.push(`${selectors.join(',')} { opacity: 0 !IMPORTANT; animation: none; }`);
-        }
-        return css;
-    });
+    (selectors, shouldHide) => [shouldHide ?
+        selectors.join(',') + '{ opacity: 0 !IMPORTANT; visibility: hidden; animation: none; transition: opacity 0.3s ease-in-out, visibility 0s 0.3s; }'
+        : selectors.join(',') + '{ transition: opacity 0.3s ease-in-out; }']);
+
 let stickyFixer = null;
 let fixers = {
     'hover': hoverFixer,
