@@ -1,5 +1,5 @@
 const isDevelopment = true;
-let explorationsLimit = 2;  // Exploring elements is costly. After some scrolling around, it can be stopped
+let explorationsLimit = 10;  // Exploring elements is costly. After some scrolling around, it can be stopped
 let exploredStickies = [];
 let defaultFixer = 'hover';
 
