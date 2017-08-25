@@ -16,12 +16,12 @@ class StickyFixer {
         let shouldHide = this.shouldHide();
         if (forceUpdate || stickies.length && shouldHide !== this.hidden) {
             let selectors = stickies.map(s => {
-                if (!s.selector || !this.selectorGenerator.testSelector(s.selector)) {
+                if (!s.selector || !this.selectorGenerator.testSelector(s.el, s.selector, true)) {
                     s.selector = this.selectorGenerator.getSelector(s.el);
                 }
                 return s.selector;
             });
-            let css = this.toggle(selectors, shouldHide);
+            let css = stickies.length ? this.toggle(selectors, shouldHide) : [];
             this.updateStylesheet(css);
             this.hidden = shouldHide;
         }
