@@ -11,7 +11,7 @@ document.querySelectorAll('#options > span').forEach(el => el.addEventListener('
         chrome.storage.local.set({'behavior': newBehavior});
         getOption(currentBehavior).classList.remove('active');
         getOption(newBehavior).classList.add('active');
-        let sendMessage = tab => chrome.tabs.sendMessage(tab.id, newBehavior);
+        let sendMessage = tab => chrome.tabs.sendMessage(tab.id, {'behavior': newBehavior});
         chrome.tabs.query({}, tabs => tabs.forEach(sendMessage));
     }
     window.close();

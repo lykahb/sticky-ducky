@@ -1,13 +1,14 @@
 const isDevelopment = true;
 let explorationsLimit = 10;  // Exploring elements is costly. After some scrolling around, it can be stopped
 let exploredStickies = [];
-let defaultFixer = 'hover';
+let behavior = 'hover';
+let scrollListener = _.throttle(doAll, 100);
 
 class StickyFixer {
-    constructor(shouldHide, hideStyles) {
+    constructor(fixer, shouldHide, hideStyles) {
         this.selectorGenerator = new CssSelectorGenerator();
-        this.stylesheet = null;
-        this.hidden = false;
+        this.stylesheet = fixer ? fixer.stylesheet : null;
+        this.hidden = fixer ? fixer.hidden : false;
         this.shouldHide = shouldHide;
         this.hideStyles = hideStyles;
     }
@@ -21,10 +22,9 @@ class StickyFixer {
                 }
                 return s.selector;
             });
-            this.showStyles = forceUpdate ? this.getShowStyles(stickies) : this.showStyles;
-            let css = stickies.length ?
-                (shouldHide ? this.hideStyles(selectors, this.showStyles) : this.showStyles)
-                : [];
+            this.showStyles = !forceUpdate && this.showStyles || this.getShowStyles(stickies);
+            let css = !stickies.length ? []
+                : (shouldHide ? this.hideStyles(selectors, this.showStyles) : this.showStyles);
             this.updateStylesheet(css);
             this.hidden = shouldHide;
         }
@@ -34,15 +34,12 @@ class StickyFixer {
     // In case the header has animation keyframes involving opacity, set animation to none
     updateStylesheet(rules) {
         if (!this.stylesheet) {
-            let style = document.createElement('style');
+            let style = document.head.appendChild(document.createElement('style'));
             style.type = 'text/css';
-            document.head.appendChild(style);
             this.stylesheet = style.sheet;
         }
-        while (this.stylesheet.cssRules.length) {
-            this.stylesheet.deleteRule(0);
-        }
-        rules.forEach(rule => this.stylesheet.insertRule(rule, 0));
+        _.map(this.stylesheet.cssRules, () => this.stylesheet.removeRule(0));
+        rules.forEach((rule, i) => this.stylesheet.insertRule(rule, i));
     }
 
     updateFixerOnScroll(stickies, forceUpdate) {
@@ -76,11 +73,11 @@ class StickyFixer {
     }
 }
 
-let hoverFixer = () => new StickyFixer(
+let hoverFixer = (fixer) => new StickyFixer(fixer,
     () => document.body.scrollTop / document.documentElement.clientHeight > 0.15,
     (selectors, showStyles) =>
         [selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0 !IMPORTANT; animation: none; }'].concat(showStyles));
-let scrollFixer = () => new StickyFixer(
+let scrollFixer = (fixer) => new StickyFixer(fixer,
     () => {
         let lastKnownScrollY = this.lastKnownScrollY;
         let currentScrollY = this.lastKnownScrollY = document.body.scrollTop;
@@ -89,7 +86,7 @@ let scrollFixer = () => new StickyFixer(
     },
     selectors =>
         [selectors.join(',') + '{ opacity: 0 !IMPORTANT; visibility: hidden; animation: none; transition: opacity 0.3s ease-in-out, visibility 0s 0.3s; }']);
-let neverFixer = () => new StickyFixer(
+let neverFixer = (fixer) => new StickyFixer(fixer,
     () => document.body.scrollTop / document.documentElement.clientHeight > 0.15,
     selectors =>
         [selectors.join(',') + '{ opacity: 0 !IMPORTANT; visibility: hidden; animation: none; transition: opacity 0.3s ease-in-out, visibility 0s 0.3s; }']);
@@ -101,11 +98,7 @@ let fixers = {
     'never': neverFixer
 };
 
-function log(...args) {
-    if (isDevelopment) {
-        console.log("remove headers: ", ...args);
-    }
-}
+let log = (...args) => isDevelopment && console.log("remove headers: ", ...args);
 
 function classify(rect) {
     // header, footer, splash, widget, sidebar
@@ -183,11 +176,11 @@ function explore(stickies) {
     return newStickies;
 }
 
-function doAll() {
-    let activeRomoved = _.partition(exploredStickies, s => document.body.contains(s.el));
-    if (activeRomoved[1].length) {
-        log("Removed from DOM: ", activeRomoved[1]);
-        exploredStickies = activeRomoved[0];
+function doAll(forceUpdate) {
+    let activeRemoved = _.partition(exploredStickies, s => document.body.contains(s.el));
+    if (activeRemoved[1].length) {
+        log("Removed from DOM: ", activeRemoved[1]);
+        exploredStickies = activeRemoved[0];
     }
     let newStickies = [];
     if (explorationsLimit) {
@@ -199,23 +192,24 @@ function doAll() {
         log(`decrement ${explorationsLimit}`);
         explorationsLimit--;
     }
-    stickyFixer.updateFixerOnScroll(exploredStickies, newStickies.length > 0);
+    stickyFixer.updateFixerOnScroll(exploredStickies, forceUpdate || newStickies.length > 0);
 }
 
-chrome.storage.local.get('behavior', response => {
-    stickyFixer = fixers[response.behavior || defaultFixer]();
-    document.addEventListener('DOMContentLoaded', doAll, false);
-    window.addEventListener("scroll", _.throttle(doAll, 100), Modernizr.passiveeventlisteners ? {passive: true} : false);
-});
-
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    log(request);
-    if (request) {
-        let newFixer = fixers[request]();
-        newFixer.stylesheet = stickyFixer.stylesheet;
-        newFixer.hidden = stickyFixer.hidden;
-        stickyFixer = newFixer;
-        stickyFixer.updateFixerOnScroll(exploredStickies, true);
-        sendResponse('ok');
+function updateBehavior(newBehavior, init) {
+    log(newBehavior);
+    let wasActive = behavior !== 'always' && !init;
+    if (newBehavior !== 'always') {
+        stickyFixer = fixers[newBehavior](stickyFixer);
+        init && document.addEventListener('DOMContentLoaded', doAll, false);
+        !wasActive && window.addEventListener("scroll", scrollListener, Modernizr.passiveeventlisteners ? {passive: true} : false);
+        doAll(true);
+    } else if (wasActive) {
+        window.removeEventListener('scroll', scrollListener);
+        stickyFixer.destroy(exploredStickies);
+        stickyFixer = null;
     }
-});
+    behavior = newBehavior;
+}
+
+chrome.storage.local.get('behavior', response => updateBehavior(response.behavior || behavior, true));
+chrome.runtime.onMessage.addListener(request => updateBehavior(request.behavior));

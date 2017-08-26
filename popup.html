@@ -11,13 +11,20 @@
             font-size: 14px;
             width: 200px;
         }
+
         #options {
             display: flex;
             flex-direction: column;
         }
+
         #options > .active {
             background-color: rgba(0, 126, 186, 0.7);
         }
+
+        #options > .active[data-behavior='always'] {
+            background-color: rgba(184, 37, 37, 0.7);
+        }
+
         #options > span {
             line-height: 2em;
             height: 2em;
@@ -35,6 +42,7 @@
     <span data-behavior="hover">On hover (mouse over)</span>
     <span data-behavior="scroll">On scroll up</span>
     <span data-behavior="never">Never</span>
+    <span data-behavior="always">Always (disable extension)</span>
 </div>
 
 <script type="application/javascript" src="popup.js"></script>
