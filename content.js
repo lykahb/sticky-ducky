@@ -4,12 +4,12 @@ let exploredStickies = [];
 let defaultFixer = 'hover';
 
 class StickyFixer {
-    constructor(shouldHide, toggle) {
+    constructor(shouldHide, hideStyles) {
         this.selectorGenerator = new CssSelectorGenerator();
         this.stylesheet = null;
         this.hidden = false;
         this.shouldHide = shouldHide;
-        this.toggle = toggle;
+        this.hideStyles = hideStyles;
     }
 
     updateStylesheetOnScroll(stickies, forceUpdate) {
@@ -21,7 +21,10 @@ class StickyFixer {
                 }
                 return s.selector;
             });
-            let css = stickies.length ? this.toggle(selectors, shouldHide) : [];
+            this.showStyles = forceUpdate ? this.getShowStyles(stickies) : this.showStyles;
+            let css = stickies.length ?
+                (shouldHide ? this.hideStyles(selectors, this.showStyles) : this.showStyles)
+                : [];
             this.updateStylesheet(css);
             this.hidden = shouldHide;
         }
@@ -47,17 +50,36 @@ class StickyFixer {
         if (forceUpdate) {
             // Check if opacity is directly in style. DOM changes don't work well with reactive websites
             log("Fixing: ", toFix);
-            toFix.filter(s => s.el.style.opacity).forEach(s => s.el.style.opacity = "");
+            toFix.filter(s => s.el.style.opacity).forEach(s => {
+                    s.styleOpacity = s.el.style.opacity;
+                    s.el.style.opacity = "";
+                }
+            );
         }
         this.updateStylesheetOnScroll(toFix, forceUpdate);
+    }
+
+    getShowStyles(stickies) {
+        let byStyleOpacity = _.groupBy(stickies, 'styleOpacity');
+        // Restore opacity to the original value set in style
+        return Object.entries(byStyleOpacity).map(([opacity, stickies]) => {
+            let rule = opacity === 'undefined' ?
+                '{ transition: opacity 0.3s ease-in-out; }' :
+                `{ transition: opacity 0.3s ease-in-out; opacity: ${opacity};}`;
+            return _.pluck(stickies, 'selector').join(',') + rule;
+        });
+    }
+
+    destroy(stickies) {
+        stickies.filter(s => s.styleOpacity).map(s => s.el.style.opacity = s.styleOpacity);
+        this.stylesheet.ownerNode.remove();
     }
 }
 
 let hoverFixer = () => new StickyFixer(
     () => document.body.scrollTop / document.documentElement.clientHeight > 0.15,
-    (selectors, shouldHide) => [shouldHide ?
-        selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0 !IMPORTANT; animation: none; transition: opacity 0.3s ease-in-out; }'
-        : selectors.join(',') + '{ transition: opacity 0.3s ease-in-out; }']);
+    (selectors, showStyles) =>
+        [selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0 !IMPORTANT; animation: none; }'].concat(showStyles));
 let scrollFixer = () => new StickyFixer(
     () => {
         let lastKnownScrollY = this.lastKnownScrollY;
@@ -65,14 +87,12 @@ let scrollFixer = () => new StickyFixer(
         let notOnTop = currentScrollY / document.documentElement.clientHeight > 0.15;
         return notOnTop && (!lastKnownScrollY || currentScrollY >= lastKnownScrollY);
     },
-    (selectors, shouldHide) => [shouldHide ?
-        selectors.join(',') + '{ opacity: 0 !IMPORTANT; visibility: hidden; animation: none; transition: opacity 0.3s ease-in-out, visibility 0s 0.3s; }'
-        : selectors.join(',') + '{ transition: opacity 0.3s ease-in-out; }']);
+    selectors =>
+        [selectors.join(',') + '{ opacity: 0 !IMPORTANT; visibility: hidden; animation: none; transition: opacity 0.3s ease-in-out, visibility 0s 0.3s; }']);
 let neverFixer = () => new StickyFixer(
     () => document.body.scrollTop / document.documentElement.clientHeight > 0.15,
-    (selectors, shouldHide) => [shouldHide ?
-        selectors.join(',') + '{ opacity: 0 !IMPORTANT; visibility: hidden; animation: none; transition: opacity 0.3s ease-in-out, visibility 0s 0.3s; }'
-        : selectors.join(',') + '{ transition: opacity 0.3s ease-in-out; }']);
+    selectors =>
+        [selectors.join(',') + '{ opacity: 0 !IMPORTANT; visibility: hidden; animation: none; transition: opacity 0.3s ease-in-out, visibility 0s 0.3s; }']);
 
 let stickyFixer = null;
 let fixers = {
