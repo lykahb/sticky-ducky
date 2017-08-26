@@ -86,7 +86,7 @@ let scrollFixer = (fixer) => new StickyFixer(fixer,
     },
     selectors =>
         [selectors.join(',') + '{ opacity: 0 !IMPORTANT; visibility: hidden; animation: none; transition: opacity 0.3s ease-in-out, visibility 0s 0.3s; }']);
-let neverFixer = (fixer) => new StickyFixer(fixer,
+let topFixer = (fixer) => new StickyFixer(fixer,
     () => document.body.scrollTop / document.documentElement.clientHeight > 0.15,
     selectors =>
         [selectors.join(',') + '{ opacity: 0 !IMPORTANT; visibility: hidden; animation: none; transition: opacity 0.3s ease-in-out, visibility 0s 0.3s; }']);
@@ -95,7 +95,7 @@ let stickyFixer = null;
 let fixers = {
     'hover': hoverFixer,
     'scroll': scrollFixer,
-    'never': neverFixer
+    'top': topFixer
 };
 
 let log = (...args) => isDevelopment && console.log("remove headers: ", ...args);
