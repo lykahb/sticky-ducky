@@ -2,7 +2,7 @@ const isDevelopment = true;
 let explorationsLimit = 10;  // Exploring elements is costly. After some scrolling around, it can be stopped
 let exploredStickies = [];
 let behavior = 'hover';
-let scrollListener = _.throttle(doAll, 100);
+let scrollListener = _.throttle(() => doAll(), 100);
 
 class StickyFixer {
     constructor(fixer, shouldHide, hideStyles) {
@@ -38,7 +38,7 @@ class StickyFixer {
             style.type = 'text/css';
             this.stylesheet = style.sheet;
         }
-        _.map(this.stylesheet.cssRules, () => this.stylesheet.removeRule(0));
+        _.map(this.stylesheet.cssRules, () => this.stylesheet.deleteRule(0));
         rules.forEach((rule, i) => this.stylesheet.insertRule(rule, i));
     }
 
@@ -74,20 +74,20 @@ class StickyFixer {
 }
 
 let hoverFixer = (fixer) => new StickyFixer(fixer,
-    () => document.body.scrollTop / document.documentElement.clientHeight > 0.15,
+    () => window.scrollY / window.innerHeight > 0.15,
     (selectors, showStyles) =>
         [selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0 !IMPORTANT; animation: none; }'].concat(showStyles));
 let scrollFixer = (fixer) => new StickyFixer(fixer,
     () => {
         let lastKnownScrollY = this.lastKnownScrollY;
-        let currentScrollY = this.lastKnownScrollY = document.body.scrollTop;
-        let notOnTop = currentScrollY / document.documentElement.clientHeight > 0.15;
+        let currentScrollY = this.lastKnownScrollY = window.scrollY;
+        let notOnTop = currentScrollY / window.innerHeight > 0.15;
         return notOnTop && (!lastKnownScrollY || currentScrollY >= lastKnownScrollY);
     },
     selectors =>
         [selectors.join(',') + '{ opacity: 0 !IMPORTANT; visibility: hidden; animation: none; transition: opacity 0.3s ease-in-out, visibility 0s 0.3s; }']);
 let topFixer = (fixer) => new StickyFixer(fixer,
-    () => document.body.scrollTop / document.documentElement.clientHeight > 0.15,
+    () => window.scrollY / window.innerHeight > 0.15,
     selectors =>
         [selectors.join(',') + '{ opacity: 0 !IMPORTANT; visibility: hidden; animation: none; transition: opacity 0.3s ease-in-out, visibility 0s 0.3s; }']);
 
@@ -102,8 +102,8 @@ let log = (...args) => isDevelopment && console.log("remove headers: ", ...args)
 
 function classify(rect) {
     // header, footer, splash, widget, sidebar
-    const clientWidth = document.documentElement.clientWidth,
-        clientHeight = document.documentElement.clientHeight;
+    const clientWidth = window.innerWidth,
+        clientHeight = window.innerHeight;
 
     if (rect.width / clientWidth > 0.35) {
         if (rect.height / clientHeight < 0.25) {
@@ -188,7 +188,7 @@ function doAll(forceUpdate) {
         exploredStickies = exploredStickies.concat(newStickies);
         log("exploredStickies", exploredStickies);
     }
-    if (explorationsLimit > 0 && window.scrollY > document.documentElement.clientHeight) {
+    if (explorationsLimit > 0 && window.scrollY > window.innerHeight) {
         log(`decrement ${explorationsLimit}`);
         explorationsLimit--;
     }
@@ -200,9 +200,9 @@ function updateBehavior(newBehavior, init) {
     let wasActive = behavior !== 'always' && !init;
     if (newBehavior !== 'always') {
         stickyFixer = fixers[newBehavior](stickyFixer);
-        init && document.addEventListener('DOMContentLoaded', doAll, false);
+        init && document.addEventListener('DOMContentLoaded', () => doAll(), false);
         !wasActive && window.addEventListener("scroll", scrollListener, Modernizr.passiveeventlisteners ? {passive: true} : false);
-        doAll(true);
+        !init && doAll(true);
     } else if (wasActive) {
         window.removeEventListener('scroll', scrollListener);
         stickyFixer.destroy(exploredStickies);
