@@ -10,6 +10,10 @@
   "browser_action": {
     "default_popup": "popup.html"
   },
+  "icons": {
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
   "content_scripts": [
     {
       "matches": [
