@@ -1,7 +1,7 @@
 const isDevelopment = true;
 let explorationsLimit = 10;  // Exploring elements is costly. After some scrolling around, it can be stopped
 let exploredStickies = [];
-let behavior = 'hover';
+let behavior = null;
 let scrollListener = _.throttle(() => doAll(), 100);
 
 class StickyFixer {
@@ -198,6 +198,9 @@ function doAll(forceUpdate) {
 function updateBehavior(newBehavior, init) {
     log(newBehavior);
     let wasActive = behavior !== 'always' && !init;
+    // Hover works when the client uses a mouse. If the device has touch capabilities, choose scroll
+    let defBehavior = "ontouchstart" in window || window.navigator.msMaxTouchPoints > 0 ? 'scroll' : 'hover';
+    newBehavior = newBehavior || defBehavior;
     if (newBehavior !== 'always') {
         stickyFixer = fixers[newBehavior](stickyFixer);
         init && document.addEventListener('DOMContentLoaded', () => doAll(), false);
@@ -211,5 +214,5 @@ function updateBehavior(newBehavior, init) {
     behavior = newBehavior;
 }
 
-chrome.storage.local.get('behavior', response => updateBehavior(response.behavior || behavior, true));
+chrome.storage.local.get('behavior', response => updateBehavior(response.behavior, true));
 chrome.runtime.onMessage.addListener(request => updateBehavior(request.behavior));
