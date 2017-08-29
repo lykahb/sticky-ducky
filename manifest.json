@@ -3,6 +3,11 @@
   "name": "Remove headers",
   "description": "This extension removes header from the current page",
   "version": "1.0",
+  "applications": {
+    "gecko": {
+      "id": "lykahb@gmail.com"
+    }
+  },
   "permissions": [
     "tabs",
     "storage"
