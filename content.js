@@ -3,10 +3,10 @@ let explorationsLimit = 10;  // Exploring elements is costly. After some scrolli
 let exploredStickies = [];
 let behavior = null;
 let scrollListener = _.throttle(() => doAll(), 100);
+let selectorGenerator = new CssSelectorGenerator();
 
 class StickyFixer {
     constructor(fixer, shouldHide, hideStyles) {
-        this.selectorGenerator = new CssSelectorGenerator();
         this.stylesheet = fixer ? fixer.stylesheet : null;
         this.hidden = fixer ? fixer.hidden : false;
         this.shouldHide = shouldHide;
@@ -16,12 +16,7 @@ class StickyFixer {
     updateStylesheetOnScroll(stickies, forceUpdate) {
         let shouldHide = this.shouldHide();
         if (forceUpdate || stickies.length && shouldHide !== this.hidden) {
-            let selectors = stickies.map(s => {
-                if (!s.selector || !this.selectorGenerator.testSelector(s.el, s.selector, true)) {
-                    s.selector = this.selectorGenerator.getSelector(s.el);
-                }
-                return s.selector;
-            });
+            let selectors = stickies.map(s => s.selector);
             this.showStyles = !forceUpdate && this.showStyles || this.getShowStyles(stickies);
             let css = !stickies.length ? []
                 : (shouldHide ? this.hideStyles(selectors, this.showStyles) : this.showStyles);
@@ -82,6 +77,7 @@ let scrollFixer = (fixer) => new StickyFixer(fixer,
         let lastKnownScrollY = this.lastKnownScrollY;
         let currentScrollY = this.lastKnownScrollY = window.scrollY;
         let notOnTop = currentScrollY / window.innerHeight > 0.15;
+        // TODO: tolerance to small scroll
         return notOnTop && (!lastKnownScrollY || currentScrollY >= lastKnownScrollY);
     },
     selectors =>
@@ -177,11 +173,7 @@ function explore(stickies) {
 }
 
 function doAll(forceUpdate) {
-    let activeRemoved = _.partition(exploredStickies, s => document.body.contains(s.el));
-    if (activeRemoved[1].length) {
-        log("Removed from DOM: ", activeRemoved[1]);
-        exploredStickies = activeRemoved[0];
-    }
+    // TODO: throttle on scroll delta and time
     let newStickies = [];
     if (explorationsLimit) {
         newStickies = explore(exploredStickies);
@@ -192,6 +184,17 @@ function doAll(forceUpdate) {
         log(`decrement ${explorationsLimit}`);
         explorationsLimit--;
     }
+    // Make the stickies up to date
+    exploredStickies.forEach(s => {
+        if (document.body.contains(s.el)) {
+            let isSelectorValid = s.selector && selectorGenerator.testSelector(s.el, s.selector, true);
+            !isSelectorValid && (s.selector = selectorGenerator.getSelector(s.el));
+        } else {
+            // Attempt to recover the removed elements
+            let els = s.selector && document.querySelectorAll(s.selector);
+            els && els.length === 1 ? (s.el = els[0]) : (s.removed = true);
+        }
+    });
     stickyFixer.updateFixerOnScroll(exploredStickies, forceUpdate || newStickies.length > 0);
 }
 
