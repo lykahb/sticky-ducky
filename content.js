@@ -38,7 +38,7 @@ class StickyFixer {
     }
 
     updateFixerOnScroll(stickies, forceUpdate) {
-        let toFix = stickies.filter(s => s.type !== 'sidebar');
+        let toFix = stickies.filter(s => s.status === 'fixed' && s.type !== 'sidebar');
         if (forceUpdate) {
             // Check if opacity is directly in style. DOM changes don't work well with reactive websites
             log("Fixing: ", toFix);
@@ -95,24 +95,29 @@ let fixers = {
 };
 
 let log = (...args) => isDevelopment && console.log("remove headers: ", ...args);
+let measure = (label, f) => {
+    if (!isDevelopment) return f();
+    let before = window.performance.now();
+    let result = f();
+    let after = window.performance.now();
+    log(`Call to ${label} took ${after - before}ms`);
+    return result;
+};
 
 function classify(rect) {
-    // header, footer, splash, widget, sidebar
-    const clientWidth = window.innerWidth,
-        clientHeight = window.innerHeight;
-
-    if (rect.width / clientWidth > 0.35) {
-        if (rect.height / clientHeight < 0.25) {
-            return rect.top / clientHeight < 0.25 ? "header" : "footer";
-        } else {
-            return "splash";
-        }
-    } else {
-        if (rect.height / clientHeight > 0.5 && (rect.left / clientWidth < 0.1 || rect.right / clientWidth > 0.9)) {
-            return "sidebar"
-        }
-        return "widget";
-    }
+    let width = window.innerWidth,
+        height = window.innerHeight,
+        isWide = rect.width / width > 0.35,
+        isThin = rect.height / height < 0.25,
+        isTall = rect.height / height > 0.5,
+        isOnTop = rect.top / height < 0.1,
+        isOnBottom = rect.bottom / height > 0.9,
+        isOnSide = rect.left / width < 0.1 || rect.right / width > 0.9;
+    return isWide && isThin && isOnTop && 'header'
+        || isWide && isThin && isOnBottom && 'footer'
+        || isWide && 'splash'
+        || isTall && isOnSide && 'sidebar'
+        || 'widget';
 }
 
 function elementFromPoint(x, y, isPercent) {
@@ -123,51 +128,60 @@ function elementFromPoint(x, y, isPercent) {
     return document.elementFromPoint(x, y);
 }
 
-function exploreInVicinity(rect) {
+function elementsInVicinity(rect) {
     const middleX = rect.left + rect.width / 2,
         middleY = rect.top + rect.height / 2,
         // TODO: use more dense samples
         coords = [[middleX, rect.top - 5], [middleX, rect.bottom + 5],
             [rect.left - 5, middleY], [rect.right + 5, middleY], [middleX, middleY]];
-
     return _.uniq(coords.map(([x, y]) => elementFromPoint(x, y)).filter(Boolean));
 }
 
 function explore(stickies) {
+    let newStickies = [];
+    let allEls = _.pluck(stickies, 'el');
     let parentSticky = el => {
         for (; el && el.tagName !== "HTML"; el = el.parentNode) {
-            if (window.getComputedStyle(el).position === "fixed") {
-                return el;
-            }
+            if (window.getComputedStyle(el).position === "fixed") return el;
         }
     };
     let filterSticky = els => _.uniq(els.map(parentSticky).filter(Boolean));
     let makeStickyObj = el => {
         let rect = el.getBoundingClientRect();
-        return {el: el, rect: rect, type: classify(rect)};
+        return {el: el, rect: rect, type: classify(rect), selector: selectorGenerator.getSelector(el), status: 'fixed'};
     };
-    let newStickies = [];
-    let allEls = _.pluck(stickies, 'el');
     let addExploredEls = els => {
+        els = _.difference(els, allEls);
+        if (!els.length) return;
         let newStickiesObj = els.map(makeStickyObj);
         allEls = allEls.concat(els);
         newStickies = newStickies.concat(newStickiesObj);
         stickies = stickies.concat(newStickiesObj);
     };
-
-    if (stickies.length === 0) {
-        // There may be several fixed headers, one below another, and directly under (z-indexed).
+    let exploreInVicinity = () => {
+        for (let i = 0; i < stickies.length; i++) {
+            addExploredEls(filterSticky(elementsInVicinity(stickies[i].rect)));
+        }
+    };
+    let exploreInSelection = els => {
+        log(`Checking ${els.length} elements in selection`);
+        addExploredEls(_.filter(els, el => window.getComputedStyle(el).position === 'fixed'));
+    };
+    let exploreInViewport = () => {
         let topRow = _.range(0, 1, 0.1).map(x => [x, 0.01]),
             bottomRow = _.range(0, 1, 0.1).map(x => [x, 0.95]),
             allCoords = topRow.concat(bottomRow),
             initial = _.uniq(allCoords.map(([x, y]) => elementFromPoint(x, y, true)));
-        log(`Checking ${initial.length} elements`, initial);
+        log(`Checking ${initial.length} elements in viewport`);
         addExploredEls(filterSticky(initial));
-    }
-
-    for (let i = 0; i < stickies.length; i++) {
-        let newEls = _.difference(filterSticky(exploreInVicinity(stickies[i].rect)), allEls);
-        newEls.length && addExploredEls(newEls);
+    };
+    if (stickies.length === 0) {
+        let bodyElements = document.body.getElementsByTagName('*');
+        bodyElements.length < 2000 ?
+            measure('exploreInSelection', () => exploreInSelection(bodyElements)) :
+            measure('exploreInViewport', () => exploreInViewport());
+    } else {
+        measure('exploreInVicinity', () => exploreInVicinity());
     }
     return newStickies;
 }
@@ -184,17 +198,17 @@ function doAll(forceUpdate) {
         log(`decrement ${explorationsLimit}`);
         explorationsLimit--;
     }
-    // Make the stickies up to date
-    exploredStickies.forEach(s => {
-        if (document.body.contains(s.el)) {
-            let isSelectorValid = s.selector && selectorGenerator.testSelector(s.el, s.selector, true);
-            !isSelectorValid && (s.selector = selectorGenerator.getSelector(s.el));
-        } else {
-            // Attempt to recover the removed elements
-            let els = s.selector && document.querySelectorAll(s.selector);
-            els && els.length === 1 ? (s.el = els[0]) : (s.removed = true);
-        }
+    let reviewStickies = () => exploredStickies.forEach(s => {
+        // An element may be moved elsewhere, removed and returned to DOM later. It tries to recover them by selector.
+        let els = document.querySelectorAll(s.selector);
+        let isUnique = els.length === 1;
+        let isInDOM = document.body.contains(s.el);
+        isInDOM && !isUnique && (s.selector = selectorGenerator.getSelector(s.el));
+        !isInDOM && isUnique && (s.el = els[0]);
+        s.status = !isInDOM && !isUnique ? 'removed' :
+            (window.getComputedStyle(s.el).position === 'fixed' ? 'fixed' : 'unfixed');
     });
+    reviewStickies();
     stickyFixer.updateFixerOnScroll(exploredStickies, forceUpdate || newStickies.length > 0);
 }
 
@@ -207,6 +221,7 @@ function updateBehavior(newBehavior, init) {
     if (newBehavior !== 'always') {
         stickyFixer = fixers[newBehavior](stickyFixer);
         init && document.addEventListener('DOMContentLoaded', () => doAll(), false);
+        init && document.addEventListener('load', () => doAll(), false);
         !wasActive && window.addEventListener("scroll", scrollListener, Modernizr.passiveeventlisteners ? {passive: true} : false);
         !init && doAll(true);
     } else if (wasActive) {
