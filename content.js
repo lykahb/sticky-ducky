@@ -2,7 +2,8 @@ const isDevelopment = true;
 let explorationsLimit = 10;  // Exploring elements is costly. After some scrolling around, it can be stopped
 let exploredStickies = [];
 let behavior = null;
-let scrollListener = _.throttle(() => doAll(), 100);
+let scrollListener = _.debounce(_.throttle(() => doAll(), 300), 25);
+let transDuration = 0.2;
 let selectorGenerator = new CssSelectorGenerator();
 
 class StickyFixer {
@@ -56,8 +57,8 @@ class StickyFixer {
         // Restore opacity to the original value set in style
         return Object.entries(byStyleOpacity).map(([opacity, stickies]) => {
             let rule = opacity === 'undefined' ?
-                '{ transition: opacity 0.3s ease-in-out; }' :
-                `{ transition: opacity 0.3s ease-in-out; opacity: ${opacity};}`;
+                `{ transition: opacity ${transDuration}s ease-in-out; }` :
+                `{ transition: opacity ${transDuration}s ease-in-out; opacity: ${opacity};}`;
             return _.pluck(stickies, 'selector').join(',') + rule;
         });
     }
@@ -69,23 +70,23 @@ class StickyFixer {
 }
 
 let hoverFixer = (fixer) => new StickyFixer(fixer,
-    () => window.scrollY / window.innerHeight > 0.15,
+    () => window.scrollY / window.innerHeight > 0.1,
     (selectors, showStyles) =>
         [selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0 !IMPORTANT; animation: none; }'].concat(showStyles));
 let scrollFixer = (fixer) => new StickyFixer(fixer,
     () => {
         let lastKnownScrollY = this.lastKnownScrollY;
         let currentScrollY = this.lastKnownScrollY = window.scrollY;
-        let notOnTop = currentScrollY / window.innerHeight > 0.15;
+        let notOnTop = currentScrollY / window.innerHeight > 0.1;
         // TODO: tolerance to small scroll
         return notOnTop && (!lastKnownScrollY || currentScrollY >= lastKnownScrollY);
     },
     selectors =>
-        [selectors.join(',') + '{ opacity: 0 !IMPORTANT; visibility: hidden; animation: none; transition: opacity 0.3s ease-in-out, visibility 0s 0.3s; }']);
+        [selectors.join(',') + `{ opacity: 0 !IMPORTANT; visibility: hidden; animation: none; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`]);
 let topFixer = (fixer) => new StickyFixer(fixer,
-    () => window.scrollY / window.innerHeight > 0.15,
+    () => window.scrollY / window.innerHeight > 0.1,
     selectors =>
-        [selectors.join(',') + '{ opacity: 0 !IMPORTANT; visibility: hidden; animation: none; transition: opacity 0.3s ease-in-out, visibility 0s 0.3s; }']);
+        [selectors.join(',') + `{ opacity: 0 !IMPORTANT; visibility: hidden; animation: none; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`]);
 
 let stickyFixer = null;
 let fixers = {
