@@ -18,15 +18,15 @@ class StickyFixer {
         let shouldHide = this.shouldHide();
         if (forceUpdate || stickies.length && shouldHide !== this.hidden) {
             let selectors = stickies.map(s => s.selector);
-            this.showStyles = !forceUpdate && this.showStyles || this.getShowStyles(stickies);
+            let showStyles = [_.pluck(stickies, 'selector').join(',') + `{ transition: opacity ${transDuration}s ease-in-out;}`];
             let css = !stickies.length ? []
-                : (shouldHide ? this.hideStyles(selectors, this.showStyles) : this.showStyles);
+                : (shouldHide ? this.hideStyles(selectors, showStyles) : showStyles);
             this.updateStylesheet(css);
             this.hidden = shouldHide;
         }
     }
 
-    // Opacity is the best way to fix the headers. Setting position to fixed breaks some layouts
+    // Opacity is the best way to fix the headers. Removing the fixed position breaks some layouts
     // In case the header has animation keyframes involving opacity, set animation to none
     updateStylesheet(rules) {
         if (!this.stylesheet) {
@@ -35,36 +35,16 @@ class StickyFixer {
             this.stylesheet = style.sheet;
         }
         _.map(this.stylesheet.cssRules, () => this.stylesheet.deleteRule(0));
-        rules.forEach((rule, i) => this.stylesheet.insertRule(rule, i));
+        let makeImportant = rule => rule.replace(/;/g, ' !important;');
+        rules.map(makeImportant).forEach((rule, i) => this.stylesheet.insertRule(rule, i));
     }
 
     updateFixerOnScroll(stickies, forceUpdate) {
         let toFix = stickies.filter(s => s.status === 'fixed' && s.type !== 'sidebar');
-        if (forceUpdate) {
-            // Check if opacity is directly in style. DOM changes don't work well with reactive websites
-            log("Fixing: ", toFix);
-            toFix.filter(s => s.el.style.opacity).forEach(s => {
-                    s.styleOpacity = s.el.style.opacity;
-                    s.el.style.opacity = "";
-                }
-            );
-        }
         this.updateStylesheetOnScroll(toFix, forceUpdate);
     }
 
-    getShowStyles(stickies) {
-        let byStyleOpacity = _.groupBy(stickies, 'styleOpacity');
-        // Restore opacity to the original value set in style
-        return Object.entries(byStyleOpacity).map(([opacity, stickies]) => {
-            let rule = opacity === 'undefined' ?
-                `{ transition: opacity ${transDuration}s ease-in-out; }` :
-                `{ transition: opacity ${transDuration}s ease-in-out; opacity: ${opacity};}`;
-            return _.pluck(stickies, 'selector').join(',') + rule;
-        });
-    }
-
-    destroy(stickies) {
-        stickies.filter(s => s.styleOpacity).map(s => s.el.style.opacity = s.styleOpacity);
+    destroy() {
         this.stylesheet.ownerNode.remove();
     }
 }
@@ -72,7 +52,7 @@ class StickyFixer {
 let hoverFixer = (fixer) => new StickyFixer(fixer,
     () => window.scrollY / window.innerHeight > 0.1,
     (selectors, showStyles) =>
-        [selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0 !IMPORTANT; animation: none; }'].concat(showStyles));
+        [selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0; }'].concat(showStyles));
 let scrollFixer = (fixer) => new StickyFixer(fixer,
     () => {
         let lastKnownScrollY = this.lastKnownScrollY;
@@ -82,11 +62,11 @@ let scrollFixer = (fixer) => new StickyFixer(fixer,
         return notOnTop && (!lastKnownScrollY || currentScrollY >= lastKnownScrollY);
     },
     selectors =>
-        [selectors.join(',') + `{ opacity: 0 !IMPORTANT; visibility: hidden; animation: none; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`]);
+        [selectors.join(',') + `{ opacity: 0; visibility: hidden; animation: none; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`]);
 let topFixer = (fixer) => new StickyFixer(fixer,
     () => window.scrollY / window.innerHeight > 0.1,
     selectors =>
-        [selectors.join(',') + `{ opacity: 0 !IMPORTANT; visibility: hidden; animation: none; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`]);
+        [selectors.join(',') + `{ opacity: 0; visibility: hidden; animation: none; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`]);
 
 let stickyFixer = null;
 let fixers = {
@@ -206,8 +186,12 @@ function doAll(forceUpdate) {
         let isInDOM = document.body.contains(s.el);
         isInDOM && !isUnique && (s.selector = selectorGenerator.getSelector(s.el));
         !isInDOM && isUnique && (s.el = els[0]);
-        s.status = !isInDOM && !isUnique ? 'removed' :
+        let newStatus = !isInDOM && !isUnique ? 'removed' :
             (window.getComputedStyle(s.el).position === 'fixed' ? 'fixed' : 'unfixed');
+        if (newStatus !== s.status) {
+            s.status = newStatus;
+            forceUpdate = true;
+        }
     });
     reviewStickies();
     stickyFixer.updateFixerOnScroll(exploredStickies, forceUpdate || newStickies.length > 0);
