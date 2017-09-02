@@ -1,5 +1,8 @@
 const isDevelopment = true;
-let explorationsLimit = 10;  // Exploring elements is costly. After some scrolling around, it can be stopped
+let exploration = {
+    // Exploring elements is costly. After some scrolling around, it can be stopped
+    limit: 10
+};
 let exploredStickies = [];
 let behavior = null;
 let scrollListener = _.debounce(_.throttle(() => doAll(), 300), 25);
@@ -144,11 +147,17 @@ function explore(stickies) {
             addExploredEls(filterSticky(elementsInVicinity(stickies[i].rect)));
         }
     };
-    let exploreInSelection = els => {
-        log(`Checking ${els.length} elements in selection`);
-        addExploredEls(_.filter(els, el => window.getComputedStyle(el).position === 'fixed'));
+    let exploreByStyle = () => {
+        addExploredEls(document.querySelectorAll("*[style*='position:fixed'],*[style*='position: fixed']"));
     };
-    let exploreInViewport = () => {
+    let exploreInElement = (el, deep) => {
+        let tags = ['div', 'header', 'footer', 'section', 'form', 'nav', 'canvas', 'video', 'hgroup', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
+        let isFixed = el => window.getComputedStyle(el).position === 'fixed';
+        if (tags.includes(el.tagName.toLowerCase()) && isFixed(el)) addExploredEls([el]);
+        deep && tags.map(tag => el.getElementsByTagName(tag))
+            .forEach(els => addExploredEls(_.filter(els, isFixed)));
+    };
+    let exploreViewportPoints = () => {
         let topRow = _.range(0, 1, 0.1).map(x => [x, 0.01]),
             bottomRow = _.range(0, 1, 0.1).map(x => [x, 0.95]),
             allCoords = topRow.concat(bottomRow),
@@ -156,11 +165,21 @@ function explore(stickies) {
         log(`Checking ${initial.length} elements in viewport`);
         addExploredEls(filterSticky(initial));
     };
+    let isVisible = el => {
+        let rect = el.getBoundingClientRect();
+        // See https://developer.mozilla.org/en-US/docs/Web/API/CSS_Object_Model/Determining_the_dimensions_of_elements
+        // Container of only fixed elements may be not in the viewport, so they'll be lost
+        let bottom = rect.top + el.scrollHeight;
+        let right = rect.left + el.scrollWidth;
+        let isPartially = rect.left < window.innerWidth && rect.top < window.innerHeight && right >= 0 && bottom >= 0;
+        let isFully = isPartially && rect.left >= 0 && right <= window.innerWidth && rect.top >= 0 && bottom <= window.innerHeight;
+        return [isPartially, isFully];
+    };
     if (stickies.length === 0) {
         let bodyElements = document.body.getElementsByTagName('*');
         bodyElements.length < 2000 ?
-            measure('exploreInSelection', () => exploreInSelection(bodyElements)) :
-            measure('exploreInViewport', () => exploreInViewport());
+            measure('exploreInElement', () => exploreInElement(document.body, true)) :
+            measure('exploreViewportPoints', () => exploreViewportPoints());
     } else {
         measure('exploreInVicinity', () => exploreInVicinity());
     }
@@ -170,15 +189,16 @@ function explore(stickies) {
 function doAll(forceUpdate) {
     // TODO: throttle on scroll delta and time
     let newStickies = [];
-    if (explorationsLimit) {
+    if (exploration.limit) {
         newStickies = explore(exploredStickies);
         exploredStickies = exploredStickies.concat(newStickies);
         log("exploredStickies", exploredStickies);
+        if (window.scrollY > window.innerHeight) {
+            log(`decrement ${exploration.limit}`);
+            exploration.limit--;
+        }
     }
-    if (explorationsLimit > 0 && window.scrollY > window.innerHeight) {
-        log(`decrement ${explorationsLimit}`);
-        explorationsLimit--;
-    }
+
     let reviewStickies = () => exploredStickies.forEach(s => {
         // An element may be moved elsewhere, removed and returned to DOM later. It tries to recover them by selector.
         let els = document.querySelectorAll(s.selector);
