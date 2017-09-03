@@ -63,7 +63,7 @@ let hoverFixer = (fixer) => new StickyFixer(fixer,
     (selectors, showStyles) =>
         [selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0; }'].concat(showStyles));
 let scrollFixer = (fixer) => new StickyFixer(fixer,
-    () =>  window.scrollY / window.innerHeight > 0.1 && window.scrollY >= lastKnownScrollY,
+    () => window.scrollY / window.innerHeight > 0.1 && window.scrollY >= lastKnownScrollY,
     selectors =>
         [selectors.join(',') + `{ opacity: 0; visibility: hidden; animation: none; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`]);
 let topFixer = (fixer) => new StickyFixer(fixer,
@@ -128,26 +128,39 @@ function explore(stickies) {
     let exploreStylesheets = () => {
         let addSelectors = selectors => {
             let sheets = exploration.stylesheets;
-            selectors.length && (sheets.selectors = sheets.selectors.concat(...selectors));
+            selectors.length && (sheets.selectors = sheets.selectors.concat(selectors));
             // Make the selectors unique once all stylesheets are processed
             ++sheets.processedCounter >= document.styleSheets.length && (sheets.selectors = _.uniq(sheets.selectors));
         };
         _.forEach(document.styleSheets, sheet => {
             if (exploration.stylesheets.els.includes(sheet)) return;
             if (sheet.cssRules !== null) {
-                let rules = _.filter(sheet.cssRules, rule => rule.type === CSSRule.STYLE_RULE && rule.style.position === 'fixed');
-                addSelectors(rules.map(rule => rule.selectorText));
+                let selectors = [];
+                let traverseRules = rules => _.forEach(rules, rule => {
+                    if (rule.type === CSSRule.STYLE_RULE && rule.style.position === 'fixed') {
+                        selectors.push(rule.selectorText);
+                    } else if (rule.type === CSSRule.MEDIA_RULE || rule.type === CSSRule.SUPPORTS_RULE) {
+                        traverseRules(rule.cssRules);
+                    }
+                });
+                traverseRules(sheet.cssRules);
+                addSelectors(selectors);
             } else if (sheet.href) {  // Bypass the CORS restrictions
                 // TODO: This may cause extra requests. Look into 'only-if-cached' and
                 // handle the cases when the stylesheet is already being downloaded for the page.
                 fetch(sheet.href, {method: 'GET', cache: 'force-cache'})
                     .then(response => response.ok ? response.text() : Promise.reject('Bad response'))
                     .then(text => {
-                        let rules = css_parse(text, true).stylesheet.rules;
-                        let selectors = rules.filter(rule => rule.type === 'rule'
-                            && rule.declarations && rule.selectors.length
-                            && rule.declarations.some(dec => dec.property === 'position' && dec.value.indexOf('fixed') >= 0))
-                            .map(rule => rule.selectors);
+                        let selectors = [];
+                        let traverseRules = rules => _.forEach(rules, rule => {
+                            if (rule.type === 'rule' && rule.declarations && rule.selectors.length
+                                && rule.declarations.some(dec => dec.property.toLowerCase() === 'position' && dec.value.toLowerCase().indexOf('fixed') >= 0)) {
+                                selectors = selectors.concat(rule.selectors);
+                            } else if (rule.type === 'media' || rule.type === 'supports') {
+                                traverseRules(rule.cssRules);
+                            }
+                        });
+                        traverseRules(css_parse(text, true).stylesheet.rules);
                         addSelectors(selectors);
                     })
                     .catch(err => log(`Error downloading stylesheet ${sheet.href}: ${err}`));
@@ -181,13 +194,17 @@ function doAll(forceUpdate) {
         let els = document.querySelectorAll(s.selector);
         let isUnique = els.length === 1;
         let isInDOM = document.body.contains(s.el);
-        isInDOM && !isUnique && (s.selector = selectorGenerator.getSelector(s.el));
-        !isInDOM && isUnique && (s.el = els[0]);
+        if (isInDOM && !isUnique) {
+            s.selector = selectorGenerator.getSelector(s.el);
+            forceUpdate = true;
+        } else if (!isInDOM && isUnique) {
+            s.el = els[0];
+        }
         let newStatus = !isInDOM && !isUnique ? 'removed' :
             (window.getComputedStyle(s.el).position === 'fixed' ? 'fixed' : 'unfixed');
         if (newStatus !== s.status) {
-            s.status = newStatus;
             forceUpdate = true;
+            s.status = newStatus;
         }
     });
     measure('reviewStickies', reviewStickies);
