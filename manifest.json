@@ -33,6 +33,7 @@
         "lib/modernizr-3.5.0.js",
         "lib/underscore-1.8.3.js",
         "lib/css-selector-generator-1.0.4.js",
+        "lib/css-parse.js",
         "content.js"
       ],
       "run_at": "document_start"

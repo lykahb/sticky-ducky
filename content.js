@@ -1,7 +1,12 @@
 const isDevelopment = true;
 let exploration = {
     // Exploring elements is costly. After some scrolling around, it can be stopped
-    limit: 10
+    limit: 10,
+    stylesheets: {
+        els: [],
+        selectors: [],
+        processedCounter: 0
+    }
 };
 let exploredStickies = [];
 let behavior = null;
@@ -104,32 +109,10 @@ function classify(rect) {
         || 'widget';
 }
 
-function elementFromPoint(x, y, isPercent) {
-    if (isPercent) {
-        x = document.documentElement.clientWidth * x;
-        y = document.documentElement.clientHeight * y;
-    }
-    return document.elementFromPoint(x, y);
-}
-
-function elementsInVicinity(rect) {
-    const middleX = rect.left + rect.width / 2,
-        middleY = rect.top + rect.height / 2,
-        // TODO: use more dense samples
-        coords = [[middleX, rect.top - 5], [middleX, rect.bottom + 5],
-            [rect.left - 5, middleY], [rect.right + 5, middleY], [middleX, middleY]];
-    return _.uniq(coords.map(([x, y]) => elementFromPoint(x, y)).filter(Boolean));
-}
-
 function explore(stickies) {
     let newStickies = [];
     let allEls = _.pluck(stickies, 'el');
-    let parentSticky = el => {
-        for (; el && el.tagName !== "HTML"; el = el.parentNode) {
-            if (window.getComputedStyle(el).position === "fixed") return el;
-        }
-    };
-    let filterSticky = els => _.uniq(els.map(parentSticky).filter(Boolean));
+    let isFixed = el => window.getComputedStyle(el).position === 'fixed';
     let makeStickyObj = el => {
         let rect = el.getBoundingClientRect();
         return {el: el, rect: rect, type: classify(rect), selector: selectorGenerator.getSelector(el), status: 'fixed'};
@@ -142,47 +125,43 @@ function explore(stickies) {
         newStickies = newStickies.concat(newStickiesObj);
         stickies = stickies.concat(newStickiesObj);
     };
-    let exploreInVicinity = () => {
-        for (let i = 0; i < stickies.length; i++) {
-            addExploredEls(filterSticky(elementsInVicinity(stickies[i].rect)));
-        }
+    let exploreSelectors = () => {
+        let allSelectors = exploration.stylesheets.selectors.slice(0);
+        allSelectors.push('*[style*="fixed"]');
+        addExploredEls(_.filter(document.body.querySelectorAll(allSelectors.join(',')), isFixed));
     };
-    let exploreByStyle = () => {
-        addExploredEls(document.querySelectorAll("*[style*='position:fixed'],*[style*='position: fixed']"));
+    let exploreStylesheets = () => {
+        let addSelectors = selectors => {
+            let sheets = exploration.stylesheets;
+            selectors.length && (sheets.selectors = sheets.selectors.concat(...selectors));
+            // Make the selectors unique once all stylesheets are processed
+            ++sheets.processedCounter >= document.styleSheets.length && (sheets.selectors = _.uniq(sheets.selectors));
+        };
+        _.forEach(document.styleSheets, sheet => {
+            if (exploration.stylesheets.els.includes(sheet)) return;
+            if (sheet.cssRules !== null) {
+                let rules = _.filter(sheet.cssRules, rule => rule.type === CSSRule.STYLE_RULE && rule.style.position === 'fixed');
+                addSelectors(rules.map(rule => rule.selectorText));
+            } else if (sheet.href) {  // Bypass the CORS restrictions
+                // TODO: This may cause extra requests. Look into 'only-if-cached' and
+                // handle the cases when the stylesheet is already being downloaded for the page.
+                fetch(sheet.href, {method: 'GET', cache: 'force-cache'})
+                    .then(response => response.ok ? response.text() : Promise.reject('Bad response'))
+                    .then(text => {
+                        let rules = css_parse(text, true).stylesheet.rules;
+                        let selectors = rules.filter(rule => rule.type === 'rule'
+                            && rule.declarations && rule.selectors.length
+                            && rule.declarations.some(dec => dec.property === 'position' && dec.value.indexOf('fixed') >= 0))
+                            .map(rule => rule.selectors);
+                        addSelectors(selectors);
+                    })
+                    .catch(err => log(`Error downloading stylesheet ${sheet.href}: ${err}`));
+            }
+            exploration.stylesheets.els.push(sheet);
+        });
     };
-    let exploreInElement = (el, deep) => {
-        let tags = ['div', 'header', 'footer', 'section', 'form', 'nav', 'canvas', 'video', 'hgroup', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
-        let isFixed = el => window.getComputedStyle(el).position === 'fixed';
-        if (tags.includes(el.tagName.toLowerCase()) && isFixed(el)) addExploredEls([el]);
-        deep && tags.map(tag => el.getElementsByTagName(tag))
-            .forEach(els => addExploredEls(_.filter(els, isFixed)));
-    };
-    let exploreViewportPoints = () => {
-        let topRow = _.range(0, 1, 0.1).map(x => [x, 0.01]),
-            bottomRow = _.range(0, 1, 0.1).map(x => [x, 0.95]),
-            allCoords = topRow.concat(bottomRow),
-            initial = _.uniq(allCoords.map(([x, y]) => elementFromPoint(x, y, true)));
-        log(`Checking ${initial.length} elements in viewport`);
-        addExploredEls(filterSticky(initial));
-    };
-    let isVisible = el => {
-        let rect = el.getBoundingClientRect();
-        // See https://developer.mozilla.org/en-US/docs/Web/API/CSS_Object_Model/Determining_the_dimensions_of_elements
-        // Container of only fixed elements may be not in the viewport, so they'll be lost
-        let bottom = rect.top + el.scrollHeight;
-        let right = rect.left + el.scrollWidth;
-        let isPartially = rect.left < window.innerWidth && rect.top < window.innerHeight && right >= 0 && bottom >= 0;
-        let isFully = isPartially && rect.left >= 0 && right <= window.innerWidth && rect.top >= 0 && bottom <= window.innerHeight;
-        return [isPartially, isFully];
-    };
-    if (stickies.length === 0) {
-        let bodyElements = document.body.getElementsByTagName('*');
-        bodyElements.length < 2000 ?
-            measure('exploreInElement', () => exploreInElement(document.body, true)) :
-            measure('exploreViewportPoints', () => exploreViewportPoints());
-    } else {
-        measure('exploreInVicinity', () => exploreInVicinity());
-    }
+    measure('exploreStylesheets', exploreStylesheets);
+    measure('exploreSelectors', exploreSelectors);
     return newStickies;
 }
 
@@ -213,7 +192,7 @@ function doAll(forceUpdate) {
             forceUpdate = true;
         }
     });
-    reviewStickies();
+    measure('reviewStickies', reviewStickies);
     stickyFixer.updateFixerOnScroll(exploredStickies, forceUpdate || newStickies.length > 0);
 }
 
