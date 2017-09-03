@@ -8,9 +8,10 @@ let exploration = {
         processedCounter: 0
     }
 };
+let lastKnownScrollY = 0;
 let exploredStickies = [];
 let behavior = null;
-let scrollListener = _.debounce(_.throttle(() => doAll(), 300), 25);
+let scrollListener = _.throttle(() => doAll(), 300);
 let transDuration = 0.2;
 let selectorGenerator = new CssSelectorGenerator();
 
@@ -62,13 +63,7 @@ let hoverFixer = (fixer) => new StickyFixer(fixer,
     (selectors, showStyles) =>
         [selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0; }'].concat(showStyles));
 let scrollFixer = (fixer) => new StickyFixer(fixer,
-    () => {
-        let lastKnownScrollY = this.lastKnownScrollY;
-        let currentScrollY = this.lastKnownScrollY = window.scrollY;
-        let notOnTop = currentScrollY / window.innerHeight > 0.1;
-        // TODO: tolerance to small scroll
-        return notOnTop && (!lastKnownScrollY || currentScrollY >= lastKnownScrollY);
-    },
+    () =>  window.scrollY / window.innerHeight > 0.1 && window.scrollY >= lastKnownScrollY,
     selectors =>
         [selectors.join(',') + `{ opacity: 0; visibility: hidden; animation: none; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`]);
 let topFixer = (fixer) => new StickyFixer(fixer,
@@ -166,7 +161,10 @@ function explore(stickies) {
 }
 
 function doAll(forceUpdate) {
-    // TODO: throttle on scroll delta and time
+    // Do nothing unless scrolled by about 5%
+    if (!forceUpdate && Math.abs(lastKnownScrollY - window.scrollY) / window.innerHeight < 0.05) {
+        return;
+    }
     let newStickies = [];
     if (exploration.limit) {
         newStickies = explore(exploredStickies);
@@ -194,6 +192,7 @@ function doAll(forceUpdate) {
     });
     measure('reviewStickies', reviewStickies);
     stickyFixer.updateFixerOnScroll(exploredStickies, forceUpdate || newStickies.length > 0);
+    lastKnownScrollY = window.scrollY;
 }
 
 function updateBehavior(newBehavior, init) {
