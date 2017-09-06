@@ -109,10 +109,12 @@ function classify(el, rect) {
         || 'widget';
 }
 
+// This liberal comparison picks up "FiXeD !important" or "-webkit-sticky" positions
+let isFixedPos = p => p.toLowerCase().indexOf('fixed') >= 0 || p.toLowerCase().indexOf('sticky') >= 0;
+
 function explore(stickies) {
     let newStickies = [];
     let allEls = _.pluck(stickies, 'el');
-    let isFixed = el => window.getComputedStyle(el).position === 'fixed';
     let makeStickyObj = el => {
         let rect = el.getBoundingClientRect();
         return {
@@ -130,9 +132,8 @@ function explore(stickies) {
         newStickies = newStickies.concat(els.map(makeStickyObj));
     };
     let exploreSelectors = () => {
-        let allSelectors = exploration.stylesheets.selectors.slice(0);
-        allSelectors.push('*[style*="fixed"]');
-        addExploredEls(_.filter(document.body.querySelectorAll(allSelectors.join(',')), isFixed));
+        let selector = exploration.stylesheets.selectors.concat(['*[style*="fixed" i]', '*[style*="sticky" i]']).join(',');
+        addExploredEls(_.filter(document.body.querySelectorAll(selector), el => isFixedPos(window.getComputedStyle(el).position)));
     };
     let exploreStylesheets = () => {
         let sheets = exploration.stylesheets;
@@ -153,7 +154,7 @@ function explore(stickies) {
             if (sheet.cssRules !== null) {
                 let selectors = [];
                 let traverseRules = rules => _.forEach(rules, rule => {
-                    if (rule.type === CSSRule.STYLE_RULE && rule.style.position === 'fixed') {
+                    if (rule.type === CSSRule.STYLE_RULE && isFixedPos(rule.style.position)) {
                         selectors.push(rule.selectorText);
                     } else if (rule.type === CSSRule.MEDIA_RULE || rule.type === CSSRule.SUPPORTS_RULE) {
                         traverseRules(rule.cssRules);
@@ -171,8 +172,7 @@ function explore(stickies) {
                         let traverseRules = rules => _.forEach(rules, rule => {
                             if (rule.type === 'rule' && rule.declarations && rule.selectors.length
                                 && rule.declarations.some(dec => dec.type === 'declaration'
-                                    && dec.property.toLowerCase() === 'position'
-                                    && dec.value.toLowerCase().indexOf('fixed') >= 0)) {
+                                    && dec.property.toLowerCase() === 'position' && isFixedPos(dec.value))) {
                                 selectors = selectors.concat(rule.selectors);
                             } else if (rule.type === 'media' || rule.type === 'supports') {
                                 traverseRules(rule.cssRules);
@@ -219,7 +219,7 @@ function doAll(forceUpdate) {
             s.el = els[0];
         }
         let newStatus = !isInDOM && !isUnique ? 'removed' :
-            (window.getComputedStyle(s.el).position === 'fixed' ? 'fixed' : 'unfixed');
+            (isFixedPos(window.getComputedStyle(s.el).position) ? 'fixed' : 'unfixed');
         if (newStatus !== s.status) {
             forceUpdate = true;
             s.status = newStatus;
