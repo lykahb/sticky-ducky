@@ -13,6 +13,7 @@ let exploredStickies = [];
 let behavior = null;
 let scrollListener = _.throttle(() => doAll(), 300);
 let transDuration = 0.2;
+let typesToShow = ['sidebar', 'splash', 'hidden'];
 let selectorGenerator = new CssSelectorGenerator();
 
 class StickyFixer {
@@ -49,7 +50,7 @@ class StickyFixer {
     }
 
     updateFixerOnScroll(stickies, forceUpdate) {
-        let toFix = stickies.filter(s => s.status === 'fixed' && s.type !== 'sidebar');
+        let toFix = stickies.filter(s => s.status === 'fixed' && !typesToShow.includes(s.type));
         this.updateStylesheetOnScroll(toFix, forceUpdate);
     }
 
@@ -99,8 +100,9 @@ function classify(rect) {
         isOnSide = rect.left / width < 0.1 || rect.right / width > 0.9;
     return isWide && isThin && isOnTop && 'header'
         || isWide && isThin && isOnBottom && 'footer'
-        || isWide && 'splash'
+        || isWide && isTall && 'splash'
         || isTall && isOnSide && 'sidebar'
+        || rect.height === 0 && rect.width === 0 && 'hidden'
         || 'widget';
 }
 
@@ -154,7 +156,9 @@ function explore(stickies) {
                         let selectors = [];
                         let traverseRules = rules => _.forEach(rules, rule => {
                             if (rule.type === 'rule' && rule.declarations && rule.selectors.length
-                                && rule.declarations.some(dec => dec.property.toLowerCase() === 'position' && dec.value.toLowerCase().indexOf('fixed') >= 0)) {
+                                && rule.declarations.some(dec => dec.type === 'declaration'
+                                    && dec.property.toLowerCase() === 'position'
+                                    && dec.value.toLowerCase().indexOf('fixed') >= 0)) {
                                 selectors = selectors.concat(rule.selectors);
                             } else if (rule.type === 'media' || rule.type === 'supports') {
                                 traverseRules(rule.cssRules);
