@@ -3,7 +3,9 @@ let exploration = {
     // Exploring elements is costly. After some scrolling around, it can be stopped
     limit: 10,
     stylesheets: {
-        els: [],
+        lastLength: 0,  // Check only the last stylesheet to know if the stylesheets were updated
+        lastStylesheet: undefined,
+        exploredSheets: [],
         selectors: [],
         processedCounter: 0
     }
@@ -89,7 +91,8 @@ let measure = (label, f) => {
     return result;
 };
 
-function classify(rect) {
+function classify(el, rect) {
+    // TODO: take overflow into account. Use scrollHeight and offsetHeight
     let width = window.innerWidth,
         height = window.innerHeight,
         isWide = rect.width / width > 0.35,
@@ -102,7 +105,7 @@ function classify(rect) {
         || isWide && isThin && isOnBottom && 'footer'
         || isWide && isTall && 'splash'
         || isTall && isOnSide && 'sidebar'
-        || rect.height === 0 && rect.width === 0 && 'hidden'
+        || el.scrollHeight === 0 && el.scrollWidth === 0 && 'hidden'
         || 'widget';
 }
 
@@ -112,15 +115,19 @@ function explore(stickies) {
     let isFixed = el => window.getComputedStyle(el).position === 'fixed';
     let makeStickyObj = el => {
         let rect = el.getBoundingClientRect();
-        return {el: el, rect: rect, type: classify(rect), selector: selectorGenerator.getSelector(el), status: 'fixed'};
+        return {
+            el: el,
+            rect: rect,
+            type: classify(el, rect),
+            selector: selectorGenerator.getSelector(el),
+            status: 'fixed'
+        };
     };
     let addExploredEls = els => {
         els = _.difference(els, allEls);
         if (!els.length) return;
-        let newStickiesObj = els.map(makeStickyObj);
         allEls = allEls.concat(els);
-        newStickies = newStickies.concat(newStickiesObj);
-        stickies = stickies.concat(newStickiesObj);
+        newStickies = newStickies.concat(els.map(makeStickyObj));
     };
     let exploreSelectors = () => {
         let allSelectors = exploration.stylesheets.selectors.slice(0);
@@ -128,14 +135,21 @@ function explore(stickies) {
         addExploredEls(_.filter(document.body.querySelectorAll(allSelectors.join(',')), isFixed));
     };
     let exploreStylesheets = () => {
+        let sheets = exploration.stylesheets;
+        if (sheets.lastLength === document.styleSheets.length &&
+            sheets.lastStylesheet === document.styleSheets[sheets.lastLength - 1]) {
+            return;
+        } else {
+            sheets.lastLength = document.styleSheets.length;
+            sheets.lastStylesheet = document.styleSheets[sheets.lastLength - 1];
+        }
         let addSelectors = selectors => {
-            let sheets = exploration.stylesheets;
             selectors.length && (sheets.selectors = sheets.selectors.concat(selectors));
             // Make the selectors unique once all stylesheets are processed
             ++sheets.processedCounter >= document.styleSheets.length && (sheets.selectors = _.uniq(sheets.selectors));
         };
         _.forEach(document.styleSheets, sheet => {
-            if (exploration.stylesheets.els.includes(sheet)) return;
+            if (sheets.exploredSheets.includes(sheet)) return;
             if (sheet.cssRules !== null) {
                 let selectors = [];
                 let traverseRules = rules => _.forEach(rules, rule => {
@@ -169,7 +183,7 @@ function explore(stickies) {
                     })
                     .catch(err => log(`Error downloading stylesheet ${sheet.href}: ${err}`));
             }
-            exploration.stylesheets.els.push(sheet);
+            sheets.exploredSheets.push(sheet);
         });
     };
     measure('exploreStylesheets', exploreStylesheets);
