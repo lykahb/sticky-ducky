@@ -3,8 +3,6 @@ let exploration = {
     // Exploring elements is costly. After some scrolling around, it can be stopped
     limit: 10,
     stylesheets: {
-        lastLength: 0,  // Check only the last stylesheet to know if the stylesheets were updated
-        lastStylesheet: undefined,
         exploredSheets: [],
         selectors: [],
         processedCounter: 0
@@ -137,12 +135,9 @@ function explore(stickies) {
     };
     let exploreStylesheets = () => {
         let sheets = exploration.stylesheets;
-        if (sheets.lastLength === document.styleSheets.length &&
-            sheets.lastStylesheet === document.styleSheets[sheets.lastLength - 1]) {
+        if (sheets.exploredSheets.length === document.styleSheets.length
+            && _.last(sheets.exploredSheets) === _.last(document.styleSheets)) {
             return;
-        } else {
-            sheets.lastLength = document.styleSheets.length;
-            sheets.lastStylesheet = document.styleSheets[sheets.lastLength - 1];
         }
         let addSelectors = selectors => {
             selectors.length && (sheets.selectors = sheets.selectors.concat(selectors));
@@ -151,7 +146,12 @@ function explore(stickies) {
         };
         _.forEach(document.styleSheets, sheet => {
             if (sheets.exploredSheets.includes(sheet)) return;
-            if (sheet.cssRules !== null) {
+            let cssRules = null;
+            try {
+                cssRules = sheet.cssRules;
+            } catch (e) {
+            }
+            if (cssRules !== null) {
                 let selectors = [];
                 let traverseRules = rules => _.forEach(rules, rule => {
                     if (rule.type === CSSRule.STYLE_RULE && isFixedPos(rule.style.position)) {
@@ -160,7 +160,7 @@ function explore(stickies) {
                         traverseRules(rule.cssRules);
                     }
                 });
-                traverseRules(sheet.cssRules);
+                traverseRules(cssRules);
                 addSelectors(selectors);
             } else if (sheet.href) {  // Bypass the CORS restrictions
                 // TODO: This may cause extra requests. Look into 'only-if-cached' and
@@ -174,8 +174,8 @@ function explore(stickies) {
                                 && rule.declarations.some(dec => dec.type === 'declaration'
                                     && dec.property.toLowerCase() === 'position' && isFixedPos(dec.value))) {
                                 selectors = selectors.concat(rule.selectors);
-                            } else if (rule.type === 'media' || rule.type === 'supports') {
-                                traverseRules(rule.cssRules);
+                            } else if ((rule.type === 'media' || rule.type === 'supports') && rule.rules) {
+                                traverseRules(rule.rules);
                             }
                         });
                         traverseRules(css_parse(text, true).stylesheet.rules);

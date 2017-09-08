@@ -10,7 +10,8 @@
   },
   "permissions": [
     "tabs",
-    "storage"
+    "storage",
+    "<all_urls>"
   ],
   "background": {
     "scripts": ["background.js"]
