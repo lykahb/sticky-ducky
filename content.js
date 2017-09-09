@@ -41,7 +41,7 @@ class StickyFixer {
     updateStylesheet(rules) {
         if (!this.stylesheet) {
             let style = document.head.appendChild(document.createElement('style'));
-            style.type = 'text/css';
+                style.type = 'text/css';
             this.stylesheet = style.sheet;
         }
         _.map(this.stylesheet.cssRules, () => this.stylesheet.deleteRule(0));
@@ -55,7 +55,7 @@ class StickyFixer {
     }
 
     destroy() {
-        this.stylesheet.ownerNode.remove();
+        this.stylesheet && this.stylesheet.ownerNode.remove();
     }
 }
 
@@ -230,25 +230,23 @@ function doAll(forceUpdate) {
     lastKnownScrollY = window.scrollY;
 }
 
-function updateBehavior(newBehavior, init) {
+function updateBehavior(newBehavior) {
     log(newBehavior);
-    let wasActive = behavior !== 'always' && !init;
-    // Hover works when the client uses a mouse. If the device has touch capabilities, choose scroll
-    let defBehavior = "ontouchstart" in window || window.navigator.msMaxTouchPoints > 0 ? 'scroll' : 'hover';
-    newBehavior = newBehavior || defBehavior;
+    let isInit = behavior === null;
+    let isActive = behavior !== 'always' && behavior !== null;
     if (newBehavior !== 'always') {
         stickyFixer = fixers[newBehavior](stickyFixer);
-        init && document.addEventListener('DOMContentLoaded', () => doAll(), false);
-        init && document.addEventListener('load', () => doAll(), false);
-        !wasActive && window.addEventListener("scroll", scrollListener, Modernizr.passiveeventlisteners ? {passive: true} : false);
-        !init && doAll(true);
-    } else if (wasActive) {
+        isInit && document.addEventListener('DOMContentLoaded', () => doAll(), false);
+        isInit && document.addEventListener('load', () => doAll(), false);
+        !isInit && doAll(true);
+        !isActive && window.addEventListener("scroll", scrollListener, Modernizr.passiveeventlisteners ? {passive: true} : false);
+    } else if (isActive && newBehavior === 'always') {
         window.removeEventListener('scroll', scrollListener);
-        stickyFixer.destroy(exploredStickies);
+        stickyFixer.destroy();
         stickyFixer = null;
     }
     behavior = newBehavior;
 }
 
-chrome.storage.local.get('behavior', response => updateBehavior(response.behavior, true));
-chrome.runtime.onMessage.addListener(request => updateBehavior(request.behavior));
+chrome.storage.local.get('behavior', response => updateBehavior(response.behavior));
+chrome.storage.onChanged.addListener(changes => updateBehavior(changes.behavior.newValue));
