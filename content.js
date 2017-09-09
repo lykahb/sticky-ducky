@@ -41,7 +41,7 @@ class StickyFixer {
     updateStylesheet(rules) {
         if (!this.stylesheet) {
             let style = document.head.appendChild(document.createElement('style'));
-                style.type = 'text/css';
+            style.type = 'text/css';
             this.stylesheet = style.sheet;
         }
         _.map(this.stylesheet.cssRules, () => this.stylesheet.deleteRule(0));
@@ -114,11 +114,9 @@ function explore(stickies) {
     let newStickies = [];
     let allEls = _.pluck(stickies, 'el');
     let makeStickyObj = el => {
-        let rect = el.getBoundingClientRect();
         return {
             el: el,
-            rect: rect,
-            type: classify(el, rect),
+            type: classify(el, el.getBoundingClientRect()),
             selector: selectorGenerator.getSelector(el),
             status: 'fixed'
         };
@@ -212,18 +210,19 @@ function doAll(forceUpdate) {
         let els = document.querySelectorAll(s.selector);
         let isUnique = els.length === 1;
         let isInDOM = document.body.contains(s.el);
-        if (isInDOM && !isUnique) {
-            s.selector = selectorGenerator.getSelector(s.el);
-            forceUpdate = true;
-        } else if (!isInDOM && isUnique) {
-            s.el = els[0];
-        }
+        let update = (key, value) => {
+            if (s[key] !== value) {
+                s[key] = value;
+                forceUpdate = true
+            }
+        };
+        isInDOM && !isUnique && update('selector', selectorGenerator.getSelector(s.el));
+        !isInDOM && isUnique && (s.el = els[0]);
+        // The dimensions are unknown until it's shown
+        s.type === 'hidden' && update('type', classify(s.el, s.el.getBoundingClientRect()));
         let newStatus = !isInDOM && !isUnique ? 'removed' :
             (isFixedPos(window.getComputedStyle(s.el).position) ? 'fixed' : 'unfixed');
-        if (newStatus !== s.status) {
-            forceUpdate = true;
-            s.status = newStatus;
-        }
+        update('status', newStatus);
     });
     measure('reviewStickies', reviewStickies);
     stickyFixer.updateFixerOnScroll(exploredStickies, forceUpdate || newStickies.length > 0);
