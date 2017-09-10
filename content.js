@@ -137,11 +137,6 @@ function explore(stickies) {
             && _.last(sheets.exploredSheets) === _.last(document.styleSheets)) {
             return;
         }
-        let addSelectors = selectors => {
-            selectors.length && (sheets.selectors = sheets.selectors.concat(selectors));
-            // Make the selectors unique once all stylesheets are processed
-            ++sheets.processedCounter >= document.styleSheets.length && (sheets.selectors = _.uniq(sheets.selectors));
-        };
         _.forEach(document.styleSheets, sheet => {
             if (sheets.exploredSheets.includes(sheet)) return;
             let cssRules = null;
@@ -149,35 +144,31 @@ function explore(stickies) {
                 cssRules = sheet.cssRules;
             } catch (e) {
             }
-            if (cssRules !== null) {
-                let selectors = [];
+            let exploreRules = cssRules => {
                 let traverseRules = rules => _.forEach(rules, rule => {
                     if (rule.type === CSSRule.STYLE_RULE && isFixedPos(rule.style.position)) {
-                        selectors.push(rule.selectorText);
+                        sheets.selectors.push(rule.selectorText);
                     } else if (rule.type === CSSRule.MEDIA_RULE || rule.type === CSSRule.SUPPORTS_RULE) {
                         traverseRules(rule.cssRules);
                     }
                 });
                 traverseRules(cssRules);
-                addSelectors(selectors);
+                // Make the selectors unique once all stylesheets are processed
+                ++sheets.processedCounter >= document.styleSheets.length && (sheets.selectors = _.uniq(sheets.selectors));
+            };
+            if (cssRules !== null) {
+                exploreRules(cssRules);
             } else if (sheet.href) {  // Bypass the CORS restrictions
                 // TODO: This may cause extra requests. Look into 'only-if-cached' and
                 // handle the cases when the stylesheet is already being downloaded for the page.
                 fetch(sheet.href, {method: 'GET', cache: 'force-cache'})
                     .then(response => response.ok ? response.text() : Promise.reject('Bad response'))
                     .then(text => {
-                        let selectors = [];
-                        let traverseRules = rules => _.forEach(rules, rule => {
-                            if (rule.type === 'rule' && rule.declarations && rule.selectors.length
-                                && rule.declarations.some(dec => dec.type === 'declaration'
-                                    && dec.property.toLowerCase() === 'position' && isFixedPos(dec.value))) {
-                                selectors = selectors.concat(rule.selectors);
-                            } else if ((rule.type === 'media' || rule.type === 'supports') && rule.rules) {
-                                traverseRules(rule.rules);
-                            }
-                        });
-                        traverseRules(css_parse(text, true).stylesheet.rules);
-                        addSelectors(selectors);
+                        let style = document.head.appendChild(document.createElement('style'));
+                        style.media = 'print';  // To prevent reflow
+                        style.innerHTML = text;
+                        exploreRules(style.sheet.cssRules);
+                        style.remove();
                     })
                     .catch(err => log(`Error downloading stylesheet ${sheet.href}: ${err}`));
             }
