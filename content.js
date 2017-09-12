@@ -10,7 +10,6 @@ let exploration = {
 };
 let lastKnownScrollY = 0;
 let exploredStickies = [];
-let behavior = null;
 let scrollListener = _.throttle(() => doAll(), 300);
 let transDuration = 0.2;
 let typesToShow = ['sidebar', 'splash', 'hidden'];
@@ -204,7 +203,7 @@ function doAll(forceUpdate) {
         let update = (key, value) => {
             if (s[key] !== value) {
                 s[key] = value;
-                forceUpdate = true
+                forceUpdate = true;
             }
         };
         isInDOM && !isUnique && update('selector', selectorGenerator.getSelector(s.el));
@@ -220,23 +219,21 @@ function doAll(forceUpdate) {
     lastKnownScrollY = window.scrollY;
 }
 
-function updateBehavior(newBehavior) {
-    log(newBehavior);
-    let isInit = behavior === null;
-    let isActive = behavior !== 'always' && behavior !== null;
-    if (newBehavior !== 'always') {
-        stickyFixer = fixers[newBehavior](stickyFixer);
+function updateBehavior(behavior, isInit) {
+    log(behavior);
+    let isActive = stickyFixer !== null;
+    if (behavior !== 'always') {
+        stickyFixer = fixers[behavior](stickyFixer);
         isInit && document.addEventListener('DOMContentLoaded', () => doAll(), false);
         isInit && document.addEventListener('load', () => doAll(), false);
         !isInit && doAll(true);
         !isActive && window.addEventListener("scroll", scrollListener, Modernizr.passiveeventlisteners ? {passive: true} : false);
-    } else if (isActive && newBehavior === 'always') {
+    } else if (isActive && behavior === 'always') {
         window.removeEventListener('scroll', scrollListener);
         stickyFixer.destroy();
         stickyFixer = null;
     }
-    behavior = newBehavior;
 }
 
-chrome.storage.local.get('behavior', response => updateBehavior(response.behavior));
+chrome.storage.local.get('behavior', response => updateBehavior(response.behavior, true));
 chrome.storage.onChanged.addListener(changes => updateBehavior(changes.behavior.newValue));
