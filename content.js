@@ -113,7 +113,7 @@ function updateBehavior(behavior, isInit) {
             [0, 500, 1000, 2000].forEach(t => setTimeout(() => doAll(true, false), t));
         }, false);
         !isInit && doAll(false, true);
-        !isActive && window.addEventListener("scroll", scrollListener, Modernizr.passiveeventlisteners ? {passive: true} : false);
+        !isActive && window.addEventListener("scroll", scrollListener, DetectIt.passiveEvents && {passive: true});
     } else if (isActive && behavior === 'always') {
         window.removeEventListener('scroll', scrollListener);
         stickyFixer.destroy();

@@ -14,7 +14,10 @@
     "<all_urls>"
   ],
   "background": {
-    "scripts": ["background.js"],
+    "scripts": [
+      "lib/detectIt-3.0.1.js",
+      "background.js"
+    ],
     "persistent": false
   },
   "browser_action": {
@@ -32,7 +35,7 @@
         "https://*/*"
       ],
       "js": [
-        "lib/modernizr-3.5.0.js",
+        "lib/detectIt-3.0.1.js",
         "lib/underscore-1.8.3.js",
         "lib/css-selector-generator-1.0.4.js",
         "content.js"
