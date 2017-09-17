@@ -4,8 +4,7 @@ let exploration = {
     limit: 10,
     stylesheets: {
         exploredSheets: [],
-        selectors: [],
-        processedCounter: 0
+        selectors: new Set(),
     }
 };
 let scroller = undefined;
@@ -145,7 +144,7 @@ function explore() {
         };
     };
     let exploreSelectors = () => {
-        let selector = exploration.stylesheets.selectors.concat(['*[style*="fixed" i]', '*[style*="sticky" i]']).join(',');
+        let selector = [...exploration.stylesheets.selectors].concat(['*[style*="fixed" i]', '*[style*="sticky" i]']).join(',');
         let els = _.filter(document.body.querySelectorAll(selector), el => isFixedPos(window.getComputedStyle(el).position));
         return _.difference(els, _.pluck(exploredStickies, 'el')).map(makeStickyObj);
     };
@@ -168,7 +167,7 @@ function explore() {
             let exploreRules = cssRules => {
                 let traverseRules = rules => _.forEach(rules, rule => {
                     if (rule.type === CSSRule.STYLE_RULE && isFixedPos(rule.style.position)) {
-                        sheets.selectors.push(rule.selectorText);
+                        sheets.selectors.add(rule.selectorText);
                     } else if (rule.type === CSSRule.MEDIA_RULE || rule.type === CSSRule.SUPPORTS_RULE) {
                         traverseRules(rule.cssRules);
                     } else if (rule.type === CSSRule.IMPORT_RULE) {
@@ -176,8 +175,6 @@ function explore() {
                     }
                 });
                 traverseRules(cssRules);
-                // Make the selectors unique once all stylesheets are processed
-                ++sheets.processedCounter >= document.styleSheets.length && (sheets.selectors = _.uniq(sheets.selectors));
             };
             if (cssRules !== null) {
                 exploreRules(cssRules);
