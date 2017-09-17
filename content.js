@@ -8,7 +8,8 @@ let exploration = {
         processedCounter: 0
     }
 };
-let lastKnownScrollY = window.scrollY;
+let scroller = undefined;
+let lastKnownScrollY = undefined;
 let exploredStickies = [];
 let scrollListener = _.debounce(_.throttle(() => doAll(), 300), 1); // Debounce delay makes it run after the page scroll listeners
 let transDuration = 0.2;
@@ -55,15 +56,15 @@ class StickyFixer {
 }
 
 let hoverFixer = (fixer) => new StickyFixer(fixer,
-    () => window.scrollY / window.innerHeight > 0.1,
+    () => getScrollY() / window.innerHeight > 0.1,
     (selectors, showStyles) =>
         [selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0; }'].concat(showStyles));
 let scrollFixer = (fixer) => new StickyFixer(fixer,
-    hidden => window.scrollY / window.innerHeight > 0.1 && window.scrollY === lastKnownScrollY ? hidden : window.scrollY > lastKnownScrollY,
+    hidden => getScrollY() / window.innerHeight > 0.1 && getScrollY() === lastKnownScrollY ? hidden : getScrollY() > lastKnownScrollY,
     selectors =>
         [selectors.join(',') + `{ opacity: 0; visibility: hidden; animation: none; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`]);
 let topFixer = (fixer) => new StickyFixer(fixer,
-    () => window.scrollY / window.innerHeight > 0.1,
+    () => getScrollY() / window.innerHeight > 0.1,
     selectors =>
         [selectors.join(',') + `{ opacity: 0; visibility: hidden; animation: none; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`]);
 
@@ -105,17 +106,27 @@ function classify(el, rect) {
 function updateBehavior(behavior, isInit) {
     log(behavior);
     let isActive = stickyFixer !== null;
+    let findScroller = () => {
+        let onFirstScroll = e => {
+            scroller = e.currentTarget;
+            scroller.addEventListener('scroll', scrollListener, DetectIt.passiveEvents && {passive: true});
+            scrollListener(e);
+            e.currentTarget.removeEventListener('scroll', onFirstScroll);
+        };
+        window.addEventListener('scroll', onFirstScroll);
+        document.body.addEventListener('scroll', onFirstScroll);
+    };
     if (behavior !== 'always') {
         stickyFixer = fixers[behavior](stickyFixer);
-        isInit && document.addEventListener('DOMContentLoaded', doAll(true, false), false);
         isInit && window.addEventListener('load', () => {
             // Run several times waiting for JS on the page to do all changes
             [0, 500, 1000, 2000].forEach(t => setTimeout(() => doAll(true, false), t));
         }, false);
         !isInit && doAll(false, true);
-        !isActive && window.addEventListener("scroll", scrollListener, DetectIt.passiveEvents && {passive: true});
+        !isActive && scroller && scroller.addEventListener('scroll', scrollListener, DetectIt.passiveEvents && {passive: true});
+        !isActive && findScroller();
     } else if (isActive && behavior === 'always') {
-        window.removeEventListener('scroll', scrollListener);
+        scroller && scroller.removeEventListener('scroll', scrollListener);
         stickyFixer.destroy();
         stickyFixer = null;
     }
@@ -189,9 +200,14 @@ function explore() {
     return exploreStylesheets().then(exploreSelectors);
 }
 
+let getScrollY = () => scroller === undefined && 1
+    || scroller.pageYOffset !== undefined && scroller.pageYOffset
+    || scroller.scrollTop !== undefined && scroller.scrollTop;
+
 function doAll(forceExplore, forceUpdate) {
     // Do nothing unless scrolled by about 5%
-    if (!forceExplore && !forceUpdate && Math.abs(lastKnownScrollY - window.scrollY) / window.innerHeight < 0.05) {
+    let scrollY = getScrollY();
+    if (!forceExplore && !forceUpdate && Math.abs(lastKnownScrollY - scrollY) / window.innerHeight < 0.05 || !document.body) {
         return;
     }
     let reviewStickies = () => exploredStickies.forEach(s => {
@@ -224,15 +240,15 @@ function doAll(forceExplore, forceUpdate) {
             onChangeRan && newStickies.length > 0 && stickyFixer.onChange(exploredStickies, true, stickyFixer.hidden);
             onChangeRan = true;
         });
-        if (window.scrollY > window.innerHeight) {
+        if (scrollY > window.innerHeight) {
             log(`decrement ${exploration.limit}`);
             exploration.limit--;
         }
     }
     !onChangeRan && stickyFixer.onChange(exploredStickies, forceUpdate);
     onChangeRan = true;
-    lastKnownScrollY = window.scrollY;
+    lastKnownScrollY = scrollY;
 }
 
-chrome.storage.local.get('behavior', response => updateBehavior(response.behavior, true));
+document.addEventListener('DOMContentLoaded', () => chrome.storage.local.get('behavior', response => updateBehavior(response.behavior, true)));
 chrome.storage.onChanged.addListener(changes => updateBehavior(changes.behavior.newValue));
