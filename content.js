@@ -156,8 +156,10 @@ function explore() {
             return Promise.resolve();
         }
         let asyncStylesheets = [];
-        _.forEach(document.styleSheets, sheet => {
+
+        let exploreStylesheet = sheet => {
             if (sheets.exploredSheets.includes(sheet)) return;
+            sheets.exploredSheets.push(sheet);
             let cssRules = null;
             try {
                 cssRules = sheet.cssRules;
@@ -169,6 +171,8 @@ function explore() {
                         sheets.selectors.push(rule.selectorText);
                     } else if (rule.type === CSSRule.MEDIA_RULE || rule.type === CSSRule.SUPPORTS_RULE) {
                         traverseRules(rule.cssRules);
+                    } else if (rule.type === CSSRule.IMPORT_RULE) {
+                        exploreStylesheet(rule.styleSheet);
                     }
                 });
                 traverseRules(cssRules);
@@ -193,8 +197,8 @@ function explore() {
                     })
                     .catch(err => log(`Error downloading stylesheet ${sheet.href}: ${err}`)));
             }
-            sheets.exploredSheets.push(sheet);
-        });
+        };
+        _.forEach(document.styleSheets, exploreStylesheet);
         return Promise.all(asyncStylesheets);
     };
     return exploreStylesheets().then(exploreSelectors);
