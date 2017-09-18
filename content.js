@@ -187,7 +187,9 @@ function explore() {
                         let iframe = document.createElement('iframe');  // To prevent reflow
                         iframe.style.display = 'none';
                         document.body.appendChild(iframe);
-                        let style = iframe.contentDocument.head.appendChild(document.createElement('style'));
+                        let iframeDoc = iframe.contentDocument;
+                        iframeDoc.head.appendChild(iframeDoc.createElement('base')).href = sheet.href;  // For @import
+                        let style = iframeDoc.head.appendChild(iframeDoc.createElement('style'));
                         style.textContent = text;
                         exploreRules(style.sheet.cssRules);
                         iframe.remove();
