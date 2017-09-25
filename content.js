@@ -133,13 +133,34 @@ function updateBehavior(behavior, isInit) {
 
 // This liberal comparison picks up "FiXeD !important" or "-webkit-sticky" positions
 let isFixedPos = p => p.toLowerCase().indexOf('fixed') >= 0 || p.toLowerCase().indexOf('sticky') >= 0;
+let highSpecificitySelector = el => {
+    // there is always the unique selector since we use nthchild.
+    let {selectors, element} = selectorGenerator.getSelectorObjects(el);
+    // Boosting with id within the selector, id of its parents, then class within the selector
+    let boosted = selectors.find(s => s.id && (s.id = s.id + s.id));
+    let booster = '';
+    if (!boosted) {
+        let isDirectParent = true;
+        for (let el = element.parentElement; el && !booster; el = el.parentElement, isDirectParent = false) {
+            let sel = selectorGenerator.getIdSelector(el);
+            sel && (booster = sel + (isDirectParent ? ' > ' : ' '));
+        }
+        boosted = !!booster;
+    }
+    if (!boosted) {
+        let combos = null;
+        selectors.find(s => combos = s.class || s.attribute);
+        combos && combos.push(...combos);
+    }
+    return booster + selectors.map(sel => selectorGenerator.stringifySelectorObject(sel)).join(' > ');
+};
 
 function explore() {
     let makeStickyObj = el => {
         return {
             el: el,
             type: classify(el, el.getBoundingClientRect()),
-            selector: selectorGenerator.getSelector(el),
+            selector: highSpecificitySelector(el),
             status: 'fixed'
         };
     };
@@ -164,18 +185,15 @@ function explore() {
                 cssRules = sheet.cssRules;
             } catch (e) {
             }
-            let exploreRules = cssRules => {
-                let traverseRules = rules => _.forEach(rules, rule => {
-                    if (rule.type === CSSRule.STYLE_RULE && isFixedPos(rule.style.position)) {
-                        sheets.selectors.add(rule.selectorText);
-                    } else if (rule.type === CSSRule.MEDIA_RULE || rule.type === CSSRule.SUPPORTS_RULE) {
-                        traverseRules(rule.cssRules);
-                    } else if (rule.type === CSSRule.IMPORT_RULE) {
-                        exploreStylesheet(rule.styleSheet);
-                    }
-                });
-                traverseRules(cssRules);
-            };
+            let exploreRules = rules => _.forEach(rules, rule => {
+                if (rule.type === CSSRule.STYLE_RULE && isFixedPos(rule.style.position)) {
+                    sheets.selectors.add(rule.selectorText);
+                } else if (rule.type === CSSRule.MEDIA_RULE || rule.type === CSSRule.SUPPORTS_RULE) {
+                    exploreRules(rule.cssRules);
+                } else if (rule.type === CSSRule.IMPORT_RULE) {
+                    exploreStylesheet(rule.styleSheet);
+                }
+            });
             if (cssRules !== null) {
                 exploreRules(cssRules);
             } else if (sheet.href) {  // Bypass the CORS restrictions
@@ -224,7 +242,7 @@ function doAll(forceExplore, forceUpdate) {
                 forceUpdate = true;
             }
         };
-        isInDOM && !isUnique && update('selector', selectorGenerator.getSelector(s.el));
+        isInDOM && !isUnique && update('selector', highSpecificitySelector(s.el));
         !isInDOM && isUnique && (s.el = els[0]);
         // The dimensions are unknown until it's shown
         s.type === 'hidden' && update('type', classify(s.el, s.el.getBoundingClientRect()));
@@ -235,7 +253,7 @@ function doAll(forceExplore, forceUpdate) {
     measure('reviewStickies', reviewStickies);
 
     let onChangeRan = false;
-    if (exploration.limit) {
+    if (exploration.limit || forceExplore) {
         explore().then(newStickies => {
             exploredStickies = exploredStickies.concat(newStickies);
             log("exploredStickies", exploredStickies);
