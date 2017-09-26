@@ -7,8 +7,8 @@ let exploration = {
         selectors: new Set(),
     }
 };
-let scroller = undefined;
 let lastKnownScrollY = undefined;
+let stickyFixer = null;
 let exploredStickies = [];
 let scrollListener = _.debounce(_.throttle(() => doAll(), 300), 1); // Debounce delay makes it run after the page scroll listeners
 let transDuration = 0.2;
@@ -23,9 +23,9 @@ class StickyFixer {
         this.hideStyles = hideStyles;
     }
 
-    onChange(stickies, forceUpdate, shouldHide) {
-        stickies = stickies.filter(s => s.status === 'fixed' && !typesToShow.includes(s.type));
-        shouldHide = shouldHide !== undefined ? shouldHide : this.shouldHide(this.hidden);
+    onChange(scrollY, forceUpdate, shouldHide) {
+        let stickies = exploredStickies.filter(s => s.status === 'fixed' && !typesToShow.includes(s.type));
+        shouldHide = shouldHide !== undefined ? shouldHide : this.shouldHide(scrollY, this.hidden);
         if (forceUpdate || stickies.length && shouldHide !== this.hidden) {
             let selectors = stickies.map(s => s.selector);
             let showStyles = [_.pluck(stickies, 'selector').join(',') + `{ transition: opacity ${transDuration}s ease-in-out;}`];
@@ -48,30 +48,21 @@ class StickyFixer {
         let makeImportant = rule => rule.replace(/;/g, ' !important;');
         rules.map(makeImportant).forEach((rule, i) => this.stylesheet.insertRule(rule, i));
     }
-
-    destroy() {
-        this.stylesheet && this.stylesheet.ownerNode.remove();
-    }
 }
 
-let hoverFixer = (fixer) => new StickyFixer(fixer,
-    () => getScrollY() / window.innerHeight > 0.1,
-    (selectors, showStyles) =>
-        [selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0; }'].concat(showStyles));
-let scrollFixer = (fixer) => new StickyFixer(fixer,
-    hidden => getScrollY() / window.innerHeight > 0.1 && getScrollY() === lastKnownScrollY ? hidden : getScrollY() > lastKnownScrollY,
-    selectors =>
-        [selectors.join(',') + `{ opacity: 0; visibility: hidden; animation: none; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`]);
-let topFixer = (fixer) => new StickyFixer(fixer,
-    () => getScrollY() / window.innerHeight > 0.1,
-    selectors =>
-        [selectors.join(',') + `{ opacity: 0; visibility: hidden; animation: none; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`]);
-
-let stickyFixer = null;
 let fixers = {
-    'hover': hoverFixer,
-    'scroll': scrollFixer,
-    'top': topFixer
+    'hover': fixer => new StickyFixer(fixer,
+        scrollY => scrollY / window.innerHeight > 0.1,
+        (selectors, showStyles) =>
+            [selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0; }'].concat(showStyles)),
+    'scroll': fixer => new StickyFixer(fixer,
+        (scrollY, hidden) => scrollY / window.innerHeight > 0.1 && scrollY === lastKnownScrollY ? hidden : scrollY > lastKnownScrollY,
+        selectors =>
+            [selectors.join(',') + `{ opacity: 0; visibility: hidden; animation: none; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`]),
+    'top': fixer => new StickyFixer(fixer,
+        scrollY => scrollY / window.innerHeight > 0.1,
+        selectors =>
+            [selectors.join(',') + `{ opacity: 0; visibility: hidden; animation: none; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`])
 };
 
 let log = (...args) => isDevelopment && console.log("remove headers: ", ...args);
@@ -102,31 +93,23 @@ function classify(el, rect) {
         || 'widget';
 }
 
-function updateBehavior(behavior, isInit) {
+let skipEvent = (isReady, obj, event, action) => isReady ? action() : obj.addEventListener(event, action, false);
+
+function updateBehavior(behavior) {
     log(behavior);
     let isActive = stickyFixer !== null;
-    let findScroller = () => {
-        let onFirstScroll = e => {
-            scroller = e.currentTarget;
-            scroller.addEventListener('scroll', scrollListener, DetectIt.passiveEvents && {passive: true});
-            scrollListener(e);
-            e.currentTarget.removeEventListener('scroll', onFirstScroll);
-        };
-        window.addEventListener('scroll', onFirstScroll);
-        document.body.addEventListener('scroll', onFirstScroll);
-    };
+    let scrollCandidates = [window, document.body];
     if (behavior !== 'always') {
         stickyFixer = fixers[behavior](stickyFixer);
-        isInit && window.addEventListener('load', () => {
+        skipEvent(document.readyState === 'complete', window, 'load', () => {
             // Run several times waiting for JS on the page to do all changes
             [0, 500, 1000, 2000].forEach(t => setTimeout(() => doAll(true, false), t));
-        }, false);
-        !isInit && doAll(false, true);
-        !isActive && scroller && scroller.addEventListener('scroll', scrollListener, DetectIt.passiveEvents && {passive: true});
-        !isActive && findScroller();
+        });
+        document.readyState === 'complete' && doAll(true, true);
+        !isActive && scrollCandidates.forEach(target => target.addEventListener('scroll', scrollListener, DetectIt.passiveEvents && {passive: true}));
     } else if (isActive && behavior === 'always') {
-        scroller && scroller.removeEventListener('scroll', scrollListener);
-        stickyFixer.destroy();
+        scrollCandidates.forEach(target => target.removeEventListener('scroll', scrollListener));
+        stickyFixer.stylesheet && stickyFixer.stylesheet.ownerNode.remove();
         stickyFixer = null;
     }
 }
@@ -165,7 +148,7 @@ function explore() {
         };
     };
     let exploreSelectors = () => {
-        let selector = [...exploration.stylesheets.selectors].concat(['*[style*="fixed" i]', '*[style*="sticky" i]']).join(',');
+        let selector = [...exploration.stylesheets.selectors, '*[style*="fixed" i]', '*[style*="sticky" i]'].join(',');
         let els = _.filter(document.body.querySelectorAll(selector), el => isFixedPos(window.getComputedStyle(el).position));
         return _.difference(els, _.pluck(exploredStickies, 'el')).map(makeStickyObj);
     };
@@ -202,8 +185,8 @@ function explore() {
                 asyncStylesheets.push(fetch(sheet.href, {method: 'GET', cache: 'force-cache'})
                     .then(response => response.ok ? response.text() : Promise.reject('Bad response'))
                     .then(text => {
-                        let iframe = document.createElement('iframe');  // To prevent reflow
-                        iframe.style.display = 'none';
+                        let iframe = document.createElement('iframe');
+                        iframe.style.display = 'none';  // Isolate stylesheet to prevent reflow
                         document.body.appendChild(iframe);
                         let iframeDoc = iframe.contentDocument;
                         iframeDoc.head.appendChild(iframeDoc.createElement('base')).href = sheet.href;  // For @import
@@ -221,14 +204,10 @@ function explore() {
     return exploreStylesheets().then(exploreSelectors);
 }
 
-let getScrollY = () => scroller === undefined && 1
-    || scroller.pageYOffset !== undefined && scroller.pageYOffset
-    || scroller.scrollTop !== undefined && scroller.scrollTop;
-
 function doAll(forceExplore, forceUpdate) {
     // Do nothing unless scrolled by about 5%
-    let scrollY = getScrollY();
-    if (!forceExplore && !forceUpdate && Math.abs(lastKnownScrollY - scrollY) / window.innerHeight < 0.05 || !document.body) {
+    let scrollY = window.scrollY || document.body.scrollTop;
+    if (!forceExplore && !forceUpdate && Math.abs(lastKnownScrollY - scrollY) / window.innerHeight < 0.05) {
         return;
     }
     let reviewStickies = () => exploredStickies.forEach(s => {
@@ -257,8 +236,8 @@ function doAll(forceExplore, forceUpdate) {
         explore().then(newStickies => {
             exploredStickies = exploredStickies.concat(newStickies);
             log("exploredStickies", exploredStickies);
-            !onChangeRan && stickyFixer.onChange(exploredStickies, forceUpdate || newStickies.length > 0);
-            onChangeRan && newStickies.length > 0 && stickyFixer.onChange(exploredStickies, true, stickyFixer.hidden);
+            !onChangeRan && stickyFixer.onChange(scrollY, forceUpdate || newStickies.length > 0);
+            onChangeRan && newStickies.length > 0 && stickyFixer.onChange(scrollY, true, stickyFixer.hidden);
             onChangeRan = true;
         });
         if (scrollY > window.innerHeight) {
@@ -266,10 +245,10 @@ function doAll(forceExplore, forceUpdate) {
             exploration.limit--;
         }
     }
-    !onChangeRan && stickyFixer.onChange(exploredStickies, forceUpdate);
+    !onChangeRan && stickyFixer.onChange(scrollY, forceUpdate);
     onChangeRan = true;
     lastKnownScrollY = scrollY;
 }
 
-document.addEventListener('DOMContentLoaded', () => chrome.storage.local.get('behavior', response => updateBehavior(response.behavior, true)));
+chrome.storage.local.get('behavior', response => skipEvent(document.readyState !== 'loading', document, 'DOMContentLoaded', () => updateBehavior(response.behavior)));
 chrome.storage.onChanged.addListener(changes => updateBehavior(changes.behavior.newValue));
