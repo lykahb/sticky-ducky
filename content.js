@@ -138,7 +138,7 @@ let highSpecificitySelector = el => {
     return booster + selectors.map(sel => selectorGenerator.stringifySelectorObject(sel)).join(' > ');
 };
 
-function explore() {
+function explore(asyncCallback) {
     let makeStickyObj = el => {
         return {
             el: el,
@@ -150,15 +150,17 @@ function explore() {
     let exploreSelectors = () => {
         let selector = [...exploration.stylesheets.selectors, '*[style*="fixed" i]', '*[style*="sticky" i]'].join(',');
         let els = _.filter(document.body.querySelectorAll(selector), el => isFixedPos(window.getComputedStyle(el).position));
-        return _.difference(els, _.pluck(exploredStickies, 'el')).map(makeStickyObj);
+        let newStickies = _.difference(els, _.pluck(exploredStickies, 'el')).map(makeStickyObj);
+        log("exploredStickies", exploredStickies = exploredStickies.concat(newStickies));
+        return newStickies;
     };
     let exploreStylesheets = () => {
         let sheets = exploration.stylesheets;
+        let asyncStylesheets = [];
         if (sheets.exploredSheets.length === document.styleSheets.length
             && _.last(sheets.exploredSheets) === _.last(document.styleSheets)) {
-            return Promise.resolve();
+            return;
         }
-        let asyncStylesheets = [];
 
         let exploreStylesheet = sheet => {
             if (sheets.exploredSheets.includes(sheet)) return;
@@ -199,9 +201,11 @@ function explore() {
             }
         };
         _.forEach(document.styleSheets, exploreStylesheet);
-        return Promise.all(asyncStylesheets);
+        return asyncStylesheets.length && Promise.all(asyncStylesheets);
     };
-    return exploreStylesheets().then(exploreSelectors);
+    let async = exploreStylesheets();
+    async && async.then(exploreSelectors).then(asyncCallback);
+    return exploreSelectors();
 }
 
 function doAll(forceExplore, forceUpdate) {
@@ -216,10 +220,8 @@ function doAll(forceExplore, forceUpdate) {
         let isUnique = els.length === 1;
         let isInDOM = document.body.contains(s.el);
         let update = (key, value) => {
-            if (s[key] !== value) {
-                s[key] = value;
-                forceUpdate = true;
-            }
+            forceUpdate |= s[key] !== value;
+            s[key] = value;
         };
         isInDOM && !isUnique && update('selector', highSpecificitySelector(s.el));
         !isInDOM && isUnique && (s.el = els[0]);
@@ -231,22 +233,14 @@ function doAll(forceExplore, forceUpdate) {
     });
     measure('reviewStickies', reviewStickies);
 
-    let onChangeRan = false;
     if (exploration.limit || forceExplore) {
-        explore().then(newStickies => {
-            exploredStickies = exploredStickies.concat(newStickies);
-            log("exploredStickies", exploredStickies);
-            !onChangeRan && stickyFixer.onChange(scrollY, forceUpdate || newStickies.length > 0);
-            onChangeRan && newStickies.length > 0 && stickyFixer.onChange(scrollY, true, stickyFixer.hidden);
-            onChangeRan = true;
-        });
+        forceUpdate |= explore(newStickies => newStickies.length > 0 && stickyFixer.onChange(scrollY, true, stickyFixer.hidden));
         if (scrollY > window.innerHeight) {
             log(`decrement ${exploration.limit}`);
             exploration.limit--;
         }
     }
-    !onChangeRan && stickyFixer.onChange(scrollY, forceUpdate);
-    onChangeRan = true;
+    stickyFixer.onChange(scrollY, forceUpdate);
     lastKnownScrollY = scrollY;
 }
 
