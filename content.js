@@ -190,7 +190,8 @@ function explore(asyncCallback) {
                         iframe.style.display = 'none';  // Isolate stylesheet to prevent reflow
                         document.body.appendChild(iframe);
                         let iframeDoc = iframe.contentDocument;
-                        iframeDoc.head.appendChild(iframeDoc.createElement('base')).href = sheet.href;  // For @import
+                        let base = sheet.href.trim().toLowerCase().indexOf('data:') === 0 ? sheet.ownerNode.baseURI : sheet.href;
+                        base && (iframeDoc.head.appendChild(iframeDoc.createElement('base')).href = base);  // For @import
                         let style = iframeDoc.head.appendChild(iframeDoc.createElement('style'));
                         style.textContent = text;
                         exploreRules(style.sheet.cssRules);
