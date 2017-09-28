@@ -1,7 +1,7 @@
 const isDevelopment = true;
 let exploration = {
-    // Exploring elements is costly. After some scrolling around, it can be stopped
-    limit: 10,
+    limit: 2,
+    lastScrollY: 0,
     stylesheets: {
         exploredSheets: [],
         selectors: new Set(),
@@ -227,13 +227,12 @@ function doAll(forceExplore, forceUpdate) {
             (isFixedPos(window.getComputedStyle(s.el).position) ? 'fixed' : 'unfixed'));
     };
     measure('reviewStickies', () => exploredStickies.forEach(reviewSticky));
-
-    if (exploration.limit || forceExplore) {
-        forceUpdate |= explore(newStickies => newStickies.length && stickyFixer.onChange(scrollY, true, stickyFixer.hidden));
-        if (scrollY > window.innerHeight && !forceExplore) {
-            log(`decrement ${exploration.limit}`);
-            exploration.limit--;
-        }
+    // Explore if scrolled far enough from the last explored place. Explore once again a bit closer.
+    let threshold = exploration.lastScrollY < window.innerHeight ? 0.25 : 0.5;
+    let isFar = Math.abs(exploration.lastScrollY - scrollY) / window.innerHeight > threshold;
+    if (isFar || exploration.limit > 0 || forceExplore) {
+        forceUpdate |= measure('explore', () => explore(newStickies => newStickies.length && stickyFixer.onChange(scrollY, true, stickyFixer.hidden)));
+        isFar ? ((exploration.limit = 1) && (exploration.lastScrollY = scrollY)) : exploration.limit--;
     }
     stickyFixer.onChange(scrollY, forceUpdate);
     lastKnownScrollY = scrollY;
