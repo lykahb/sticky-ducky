@@ -54,7 +54,7 @@ let fixers = {
     'hover': fixer => new StickyFixer(fixer,
         scrollY => scrollY / window.innerHeight > 0.1,
         (selectors, showStyles) =>
-            [selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0; }'].concat(showStyles)),
+            [selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0; }', ...showStyles]),
     'scroll': fixer => new StickyFixer(fixer,
         (scrollY, hidden) => scrollY / window.innerHeight > 0.1 && scrollY === lastKnownScrollY ? hidden : scrollY > lastKnownScrollY,
         selectors =>
@@ -97,6 +97,7 @@ let skipEvent = (isReady, obj, event, action) => isReady ? action() : obj.addEve
 
 function updateBehavior(behavior) {
     log(behavior);
+    behavior = behavior || (DetectIt.deviceType === 'mouseonly' ? 'hover' : 'scroll');
     let isActive = stickyFixer !== null;
     let scrollCandidates = [window, document.body];
     if (behavior !== 'always') {
@@ -139,19 +140,17 @@ let highSpecificitySelector = el => {
 };
 
 function explore(asyncCallback) {
-    let makeStickyObj = el => {
-        return {
-            el: el,
-            type: classify(el, el.getBoundingClientRect()),
-            selector: highSpecificitySelector(el),
-            status: 'fixed'
-        };
-    };
+    let makeStickyObj = el => ({
+        el: el,
+        type: classify(el, el.getBoundingClientRect()),
+        selector: highSpecificitySelector(el),
+        status: 'fixed'
+    });
     let exploreSelectors = () => {
         let selector = [...exploration.stylesheets.selectors, '*[style*="fixed" i]', '*[style*="sticky" i]'].join(',');
-        let els = _.filter(document.body.querySelectorAll(selector), el => isFixedPos(window.getComputedStyle(el).position));
-        let newStickies = _.difference(els, _.pluck(exploredStickies, 'el')).map(makeStickyObj);
-        log("exploredStickies", exploredStickies = exploredStickies.concat(newStickies));
+        let newStickies = _.difference(document.body.querySelectorAll(selector), _.pluck(exploredStickies, 'el')).map(makeStickyObj);
+        newStickies.length && exploredStickies.push(...newStickies);
+        log("exploredStickies", exploredStickies);
         return newStickies;
     };
     let exploreStylesheets = () => {
@@ -214,28 +213,24 @@ function doAll(forceExplore, forceUpdate) {
     if (!forceExplore && !forceUpdate && Math.abs(lastKnownScrollY - scrollY) / window.innerHeight < 0.05) {
         return;
     }
-    let reviewStickies = () => exploredStickies.forEach(s => {
+    let reviewSticky = s => {
         // An element may be moved elsewhere, removed and returned to DOM later. It tries to recover them by selector.
-        let els = document.querySelectorAll(s.selector);
-        let isUnique = els.length === 1;
+        let els = s.selector && document.querySelectorAll(s.selector);
+        let isUnique = els && els.length === 1;
         let isInDOM = document.body.contains(s.el);
-        let update = (key, value) => {
-            forceUpdate |= s[key] !== value;
-            s[key] = value;
-        };
+        let update = (key, value) => s[key] !== value && (forceUpdate |= s[key] = value);
         isInDOM && !isUnique && update('selector', highSpecificitySelector(s.el));
-        !isInDOM && isUnique && (s.el = els[0]);
+        !isInDOM && isUnique && (s.el = els[0]); // Does not affect stylesheet, so no update
         // The dimensions are unknown until it's shown
         s.type === 'hidden' && update('type', classify(s.el, s.el.getBoundingClientRect()));
-        let newStatus = !isInDOM && !isUnique ? 'removed' :
-            (isFixedPos(window.getComputedStyle(s.el).position) ? 'fixed' : 'unfixed');
-        update('status', newStatus);
-    });
-    measure('reviewStickies', reviewStickies);
+        update('status', !isInDOM && !isUnique ? 'removed' :
+            (isFixedPos(window.getComputedStyle(s.el).position) ? 'fixed' : 'unfixed'));
+    };
+    measure('reviewStickies', () => exploredStickies.forEach(reviewSticky));
 
     if (exploration.limit || forceExplore) {
-        forceUpdate |= explore(newStickies => newStickies.length > 0 && stickyFixer.onChange(scrollY, true, stickyFixer.hidden));
-        if (scrollY > window.innerHeight) {
+        forceUpdate |= explore(newStickies => newStickies.length && stickyFixer.onChange(scrollY, true, stickyFixer.hidden));
+        if (scrollY > window.innerHeight && !forceExplore) {
             log(`decrement ${exploration.limit}`);
             exploration.limit--;
         }
