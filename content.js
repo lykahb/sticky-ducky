@@ -144,7 +144,7 @@ function explore(asyncCallback) {
         el: el,
         type: classify(el, el.getBoundingClientRect()),
         selector: highSpecificitySelector(el),
-        status: 'fixed'
+        status: isFixedPos(window.getComputedStyle(el).position) ? 'fixed' : 'unfixed'
     });
     let exploreSelectors = () => {
         let selector = [...exploration.stylesheets.selectors, '*[style*="fixed" i]', '*[style*="sticky" i]'].join(',');
@@ -219,7 +219,13 @@ function doAll(forceExplore, forceUpdate) {
         let els = s.selector && document.querySelectorAll(s.selector);
         let isUnique = els && els.length === 1;
         let isInDOM = document.body.contains(s.el);
-        let update = (key, value) => s[key] !== value && (forceUpdate |= s[key] = value);
+        let update = (key, value) => {
+            if (s[key] !== value) {
+                forceUpdate = true;
+                log(`Updated ${key} to ${value}`, s);
+                s[key] = value;
+            }
+        };
         isInDOM && !isUnique && update('selector', highSpecificitySelector(s.el));
         !isInDOM && isUnique && (s.el = els[0]); // Does not affect stylesheet, so no update
         // The dimensions are unknown until it's shown
@@ -232,7 +238,8 @@ function doAll(forceExplore, forceUpdate) {
     let threshold = exploration.lastScrollY < window.innerHeight ? 0.25 : 0.5;
     let isFar = Math.abs(exploration.lastScrollY - scrollY) / window.innerHeight > threshold;
     if (isFar || exploration.limit > 0 || forceExplore) {
-        forceUpdate |= measure('explore', () => explore(newStickies => newStickies.length && stickyFixer.onChange(scrollY, true, stickyFixer.hidden)));
+        let newStickies = measure('explore', () => explore(newStickies => newStickies.length && stickyFixer && stickyFixer.onChange(scrollY, true, stickyFixer.hidden)));
+        forceUpdate |= newStickies.length > 0;
         isFar ? ((exploration.limit = 1) && (exploration.lastScrollY = scrollY)) : exploration.limit--;
     }
     stickyFixer.onChange(scrollY, forceUpdate);
