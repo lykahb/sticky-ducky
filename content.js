@@ -120,22 +120,20 @@ let isFixedPos = p => p.toLowerCase().indexOf('fixed') >= 0 || p.toLowerCase().i
 let highSpecificitySelector = el => {
     // there is always the unique selector since we use nthchild.
     let {selectors, element} = selectorGenerator.getSelectorObjects(el);
-    // Boosting with id within the selector, id of its parents, then class within the selector
-    let boosted = selectors.find(s => s.id && (s.id = s.id + s.id));
-    let booster = '';
-    if (!boosted) {
-        let isDirectParent = true;
-        for (let el = element.parentElement; el && !booster; el = el.parentElement, isDirectParent = false) {
+    let idWithinSelector = () => selectors.find(s => s.id && (s.id = s.id + s.id));
+    let ascendantId = () => {
+        let directParent = element.parentElement;
+        for (let el = directParent; el; el = el.parentElement) {
             let sel = selectorGenerator.getIdSelector(el);
-            sel && (booster = sel + (isDirectParent ? ' > ' : ' '));
+            if (sel) return sel + (el === directParent ? ' > ' : ' ');
         }
-        boosted = !!booster;
-    }
-    if (!boosted) {
-        let combos = null;
-        selectors.find(s => combos = s.class || s.attribute);
-        combos && combos.push(...combos);
-    }
+    };
+    let classesWithinSelector = () => {
+        let list = null;
+        selectors.find(s => list = s.class || s.attribute) && list.push(...list);
+    };
+    let booster = '';
+    idWithinSelector() || (booster = ascendantId() || '') || classesWithinSelector();
     return booster + selectors.map(sel => selectorGenerator.stringifySelectorObject(sel)).join(' > ');
 };
 
