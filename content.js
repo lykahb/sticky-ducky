@@ -65,7 +65,7 @@ let fixers = {
             [selectors.join(',') + `{ opacity: 0; visibility: hidden; animation: none; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`])
 };
 
-let log = (...args) => isDevelopment && console.log("remove headers: ", ...args);
+let log = (...args) => isDevelopment && console.log("Sticky Ducky: ", ...args);
 let measure = (label, f) => {
     if (!isDevelopment) return f();
     let before = window.performance.now();
