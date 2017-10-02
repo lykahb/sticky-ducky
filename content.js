@@ -75,21 +75,24 @@ let measure = (label, f) => {
     return result;
 };
 
-function classify(el, rect) {
-    // TODO: take overflow into account. Use scrollHeight and offsetHeight
-    let width = window.innerWidth,
-        height = window.innerHeight,
-        isWide = rect.width / width > 0.35,
-        isThin = rect.height / height < 0.25,
-        isTall = rect.height / height > 0.5,
-        isOnTop = rect.top / height < 0.1,
-        isOnBottom = rect.bottom / height > 0.9,
-        isOnSide = rect.left / width < 0.1 || rect.right / width > 0.9;
+function classify(el) {
+    let viewportWidth = window.innerWidth,
+        viewportHeight = window.innerHeight,
+        rect = el.getBoundingClientRect(),
+        clip = (a, b, x) => Math.min(Math.max(a, x), b),
+        elWidth = clip(0, viewportWidth, rect.right) - clip(0, viewportWidth, rect.left),
+        elHeight = clip(0, viewportHeight, rect.bottom) - clip(0, viewportHeight, rect.top),
+        isWide = elWidth / viewportWidth > 0.35,
+        isThin = elHeight / viewportHeight < 0.25,
+        isTall = elHeight / viewportHeight > 0.5,
+        isOnTop = rect.top / viewportHeight < 0.1,
+        isOnBottom = rect.bottom / viewportHeight > 0.9,
+        isOnSide = rect.left / viewportWidth < 0.1 || rect.right / viewportWidth > 0.9;
     return isWide && isThin && isOnTop && 'header'
         || isWide && isThin && isOnBottom && 'footer'
         || isWide && isTall && 'splash'
         || isTall && isOnSide && 'sidebar'
-        || el.scrollHeight === 0 && el.scrollWidth === 0 && 'hidden'
+        || elWidth === 0 && elHeight === 0 && 'hidden'
         || 'widget';
 }
 
@@ -140,7 +143,7 @@ let highSpecificitySelector = el => {
 function explore(asyncCallback) {
     let makeStickyObj = el => ({
         el: el,
-        type: classify(el, el.getBoundingClientRect()),
+        type: classify(el),
         selector: highSpecificitySelector(el),
         status: isFixedPos(window.getComputedStyle(el).position) ? 'fixed' : 'unfixed'
     });
@@ -227,7 +230,7 @@ function doAll(forceExplore, forceUpdate) {
         isInDOM && !isUnique && update('selector', highSpecificitySelector(s.el));
         !isInDOM && isUnique && (s.el = els[0]); // Does not affect stylesheet, so no update
         // The dimensions are unknown until it's shown
-        s.type === 'hidden' && update('type', classify(s.el, s.el.getBoundingClientRect()));
+        s.type === 'hidden' && update('type', classify(s.el));
         update('status', !isInDOM && !isUnique ? 'removed' :
             (isFixedPos(window.getComputedStyle(s.el).position) ? 'fixed' : 'unfixed'));
     };
