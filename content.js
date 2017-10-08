@@ -100,7 +100,7 @@ let skipEvent = (isReady, obj, event, action) => isReady ? action() : obj.addEve
 
 function updateBehavior(behavior) {
     log(behavior);
-    behavior = behavior || (DetectIt.deviceType === 'mouseonly' ? 'hover' : 'scroll');
+    behavior = behavior || (DetectIt.deviceType === 'mouseOnly' ? 'hover' : 'scroll');
     let isActive = stickyFixer !== null;
     let scrollCandidates = [window, document.body];
     if (behavior !== 'always') {

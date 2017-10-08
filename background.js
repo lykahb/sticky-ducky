@@ -3,7 +3,7 @@
 chrome.runtime.onInstalled.addListener(() => {
     chrome.storage.local.get('behavior', response => {
         // Hover works when the client uses a mouse. If the device has touch capabilities, choose scroll
-        let defBehavior = DetectIt.deviceType === 'mouseonly' ? 'hover' : 'scroll';
+        let defBehavior = DetectIt.deviceType === 'mouseOnly' ? 'hover' : 'scroll';
         response.behavior || chrome.storage.local.set({'behavior': defBehavior});
     });
 });
