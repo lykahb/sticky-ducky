@@ -79,12 +79,12 @@ function classify(el) {
     let viewportWidth = window.innerWidth,
         viewportHeight = window.innerHeight,
         rect = el.getBoundingClientRect(),
-        clip = (a, b, x) => Math.min(Math.max(a, x), b),
-        elWidth = clip(0, viewportWidth, rect.right) - clip(0, viewportWidth, rect.left),
-        elHeight = clip(0, viewportHeight, rect.bottom) - clip(0, viewportHeight, rect.top),
-        isWide = elWidth / viewportWidth > 0.35,
-        isThin = elHeight / viewportHeight < 0.25,
-        isTall = elHeight / viewportHeight > 0.5,
+        clip = (val, low, high, max) => Math.max(0, val + Math.min(low, 0) + Math.min(max - high, 0)),
+        width = clip(rect.width || el.scrollWidth, rect.left, rect.right, viewportWidth),
+        height = clip(rect.height || el.scrollHeight, rect.top, rect.bottom, viewportHeight),
+        isWide = width / viewportWidth > 0.35,
+        isThin = height / viewportHeight < 0.25,
+        isTall = height / viewportHeight > 0.5,
         isOnTop = rect.top / viewportHeight < 0.1,
         isOnBottom = rect.bottom / viewportHeight > 0.9,
         isOnSide = rect.left / viewportWidth < 0.1 || rect.right / viewportWidth > 0.9;
@@ -92,7 +92,7 @@ function classify(el) {
         || isWide && isThin && isOnBottom && 'footer'
         || isWide && isTall && 'splash'
         || isTall && isOnSide && 'sidebar'
-        || elWidth === 0 && elHeight === 0 && 'hidden'
+        || width === 0 && height === 0 && 'hidden'
         || 'widget';
 }
 
