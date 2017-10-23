@@ -18,6 +18,6 @@ So, after several rounds of rewrites and polishing it's ready for release. Enjoy
 
 ## Installation
 
-https://chrome.google.com/webstore/detail/sticky-ducky/gklhneccajklhledmencldobkjjpnhkd
+[Chrome Store](https://chrome.google.com/webstore/detail/sticky-ducky/gklhneccajklhledmencldobkjjpnhkd)
 
-https://addons.mozilla.org/en-US/firefox/addon/sticky-ducky/
+[Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sticky-ducky/)
