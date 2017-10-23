@@ -1,4 +1,4 @@
-const isDevelopment = true;
+const isDevelopment = false;
 let exploration = {
     limit: 2,
     lastScrollY: 0,

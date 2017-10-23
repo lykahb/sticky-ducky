@@ -4,10 +4,11 @@
   "author": "Boris Lykah",
   "description": "Cleans pages of the sticky elements and shows them when needed",
   "homepage_url": "https://github.com/lykahb/sticky-ducky",
-  "version": "1.0",
+  "version": "1.0.1",
   "applications": {
     "gecko": {
-      "id": "lykahb@gmail.com"
+      "id": "sticky-ducky@addons.mozilla.org",
+      "strict_min_version": "52.0"
     }
   },
   "permissions": [
