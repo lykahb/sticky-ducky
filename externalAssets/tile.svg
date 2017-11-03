@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg"
+     preserveAspectRatio="xMidYMid meet" viewBox="0 0 440 280"
+     width="440" height="280">
+    <style type="text/css" >
+        <![CDATA[
+        #label {
+            fill: #ffffff;
+        }
+
+        #caption {
+            fill: #ededed;
+        }
+        #backdrop > .caption {
+            fill: #2c952c;;
+        }
+        ]]>
+    </style>
+    <defs>
+        <g id="duck">
+            <g id="Body_8_">
+                <g>
+                    <path d="M50,26.001c0,0-4-2-4-4c0-4,4-2,8-8C54,14.001,52,0,38,0C26,0,22,10.001,22,16.001c0,10,6,10,6,16    c0,2-2,4-8,4c-10,0-14-10-14-10s-6,4-6,14c0,12,8,24,26,24h10c6,0,18-8,18-18s-6-10-6-14S50,26.001,50,26.001z"
+                          style="fill:#FFCC66;"/>
+                </g>
+            </g>
+            <g id="Beak">
+                <g>
+                    <path d="M60,16.001c-4,0-6-2-6-2c-4,6-8,4-8,8c0,2,4,4,4,4c4,0,14-6,14-8S62,16.001,60,16.001z"
+                          style="fill:#FF8833;"/>
+                </g>
+            </g>
+            <g id="Eye">
+                <g>
+                    <circle cx="48" cy="12.001" r="2" style="fill:#666666;"/>
+                </g>
+            </g>
+        </g>
+        <g id="backdrop">
+            <rect width="440" height="280" fill="url(#Gradient2)"></rect>
+            <rect width="440" height="65" y="215" class="caption"></rect>
+        </g>
+        <circle id="background" cx="64" cy="64" r="64" fill="#5b4cff"></circle>
+        <linearGradient id="Gradient2" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stop-color="#FF8833"/>
+            <stop offset="100%" stop-color="#DF7020"/>
+        </linearGradient>
+        <g id="label">
+            <text font-family="Helvetica Neue, sans-serif" font-weight="bold"><tspan>Sticky</tspan>
+                <tspan>Ducky</tspan></text>
+        </g>
+
+        <g id="logo">
+            <use href="#background"></use>
+            <use href="#duck" x="11" y="10" transform="scale(1.5)"></use>
+        </g>
+        <g id="caption">
+            <text font-family="Helvetica Neue, sans-serif" font-weight="bold">Cleans page of sticky headers</text>
+        </g>
+    </defs>
+    <g>
+        <use href="#backdrop"></use>
+        <use href="#logo" transform="translate(20, 46) scale(0.9)"></use>
+        <use href="#label" transform="translate(165, 115) scale(2.5)"></use>
+        <use href="#caption" transform="translate(24, 255) scale(1.7)"></use>
+    </g>
+</svg>
