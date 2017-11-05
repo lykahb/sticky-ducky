@@ -1,4 +1,4 @@
-const isDevelopment = false;
+let isDevelopment = false;
 let exploration = {
     limit: 2,
     lastScrollY: 0,
@@ -249,3 +249,4 @@ function doAll(forceExplore, forceUpdate) {
 
 chrome.storage.local.get('behavior', response => skipEvent(document.readyState !== 'loading', document, 'DOMContentLoaded', () => updateBehavior(response.behavior)));
 chrome.storage.onChanged.addListener(changes => updateBehavior(changes.behavior.newValue));
+chrome.storage.local.get('isDevelopment', response => isDevelopment = !!response.isDevelopment);
