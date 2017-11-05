@@ -56,13 +56,13 @@
             <use href="#duck" x="11" y="10" transform="scale(1.5)"></use>
         </g>
         <g id="caption">
-            <text font-family="Helvetica Neue, sans-serif" font-weight="bold">Cleans page of sticky headers</text>
+            <text font-family="Helvetica Neue, sans-serif">Cleans page of sticky headers</text>
         </g>
     </defs>
     <g>
         <use href="#backdrop"></use>
         <use href="#logo" transform="translate(20, 46) scale(0.9)"></use>
-        <use href="#label" transform="translate(165, 115) scale(2.5)"></use>
-        <use href="#caption" transform="translate(24, 255) scale(1.7)"></use>
+        <use href="#label" transform="translate(155, 115) scale(2.7)"></use>
+        <use href="#caption" transform="translate(8, 257) scale(1.95)"></use>
     </g>
 </svg>
