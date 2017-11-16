@@ -3,7 +3,6 @@
   "name": "Sticky Ducky",
   "author": "Boris Lykah",
   "description": "Cleans pages of the sticky elements and shows them when needed",
-  "homepage_url": "https://github.com/lykahb/sticky-ducky",
   "version": "1.0.4",
   "applications": {
     "gecko": {
