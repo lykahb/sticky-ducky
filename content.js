@@ -100,7 +100,6 @@ let skipEvent = (isReady, obj, event, action) => isReady ? action() : obj.addEve
 
 function updateBehavior(behavior) {
     log(behavior);
-    behavior = behavior || (DetectIt.deviceType === 'mouseOnly' ? 'hover' : 'scroll');
     let isActive = stickyFixer !== null;
     let scrollCandidates = [window, document.body];
     if (behavior !== 'always') {
@@ -247,6 +246,11 @@ function doAll(forceExplore, forceUpdate) {
     lastKnownScrollY = scrollY;
 }
 
-chrome.storage.local.get('behavior', response => skipEvent(document.readyState !== 'loading', document, 'DOMContentLoaded', () => updateBehavior(response.behavior)));
+chrome.storage.local.get('behavior', response => {
+    // Hover works only when the client uses a mouse. If the device has touch capabilities, choose scroll
+    let behavior = response.behavior || DetectIt.deviceType === 'mouseOnly' ? 'hover' : 'scroll';
+    if (!response.behavior) chrome.storage.local.set({'behavior': behavior});
+    skipEvent(document.readyState !== 'loading', document, 'DOMContentLoaded', () => updateBehavior(behavior));
+});
 chrome.storage.onChanged.addListener(changes => updateBehavior(changes.behavior.newValue));
 chrome.storage.local.get('isDevelopment', response => isDevelopment = !!response.isDevelopment);
