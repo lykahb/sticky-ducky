@@ -129,7 +129,8 @@ function updateBehavior(behavior) {
             [0, 500, 1000, 2000].forEach(t => setTimeout(() => doAll(true, false), t));
         });
         document.readyState === 'complete' && doAll(true, true);
-        !isActive && scrollCandidates.forEach(target => target.addEventListener('scroll', scrollListener, DetectIt.passiveEvents && {passive: true}));
+        let options = DetectIt && DetectIt.passiveEvents && {passive: true}; // Firefox bug, DetectIt may be not available
+        !isActive && scrollCandidates.forEach(target => target.addEventListener('scroll', scrollListener, options));
     } else if (isActive && behavior === 'always') {
         scrollCandidates.forEach(target => target.removeEventListener('scroll', scrollListener));
         stickyFixer.stylesheet && stickyFixer.stylesheet.ownerNode.remove();
