@@ -12,28 +12,40 @@ let stickyFixer = null;
 let exploredStickies = [];
 let scrollListener = _.debounce(_.throttle(() => doAll(), 300), 1); // Debounce delay makes it run after the page scroll listeners
 let transDuration = 0.2;
-let typesToShow = ['sidebar', 'splash', 'hidden'];
+let typesToShow = ['sidebar', 'splash', 'hidden']; // Dimensions of a hidden element are unknown
 let selectorGenerator = new CssSelectorGenerator();
 
 class StickyFixer {
-    constructor(fixer, shouldHide, hideStyles) {
+    constructor(fixer, getNewState, hideStyles) {
         this.stylesheet = fixer ? fixer.stylesheet : null;
-        this.hidden = fixer ? fixer.hidden : false;
-        this.shouldHide = shouldHide;
+        this.state = fixer ? fixer.state : 'show'; // hide, show, showFooters
+        this.getNewState = getNewState;
         this.hideStyles = hideStyles;
     }
 
-    onChange(scrollY, forceUpdate, shouldHide) {
+    onChange(scrollY, forceUpdate, keepState) {
         let stickies = exploredStickies.filter(s => s.status === 'fixed' && !typesToShow.includes(s.type));
-        shouldHide = shouldHide !== undefined ? shouldHide : this.shouldHide(scrollY, this.hidden);
-        if (forceUpdate || stickies.length && shouldHide !== this.hidden) {
-            let selectors = stickies.map(s => s.selector);
-            let showStyles = [_.pluck(stickies, 'selector').join(',') + `{ transition: opacity ${transDuration}s ease-in-out;}`];
-            let css = !stickies.length ? []
-                : (shouldHide ? this.hideStyles(selectors, showStyles) : showStyles);
-            this.updateStylesheet(css);
+        let input = {
+            scrollY: scrollY,
+            oldState: this.state,
+            isOnTop: scrollY / window.innerHeight < 0.1,
+            isOnBottom: (getDocumentHeight() - window.scrollY) / window.innerHeight < 1.3
+        };
+        input.defaultState = input.isOnTop && 'show' || input.isOnBottom && 'showFooters' || 'hide';
+        let newState = keepState ? this.state : this.getNewState(input);
+        if (forceUpdate || newState !== this.state) {
+            let allSels = stickies.map(s => s.selector),
+                rules = [];
+            if (stickies.length) {
+                rules.push(allSels.join(',') + `{ transition: opacity ${transDuration}s ease-in-out; animation: none; }`);  // Show style
+                let whatToHide = newState === 'hide' && allSels
+                    || newState === 'showFooters' && stickies.filter(s => s.type !== 'footer').map(s => s.selector)
+                    || [];
+                whatToHide.length && rules.push(this.hideStyles(whatToHide));
+            }
+            this.updateStylesheet(rules);
+            this.state = newState;
         }
-        this.hidden = shouldHide;
     }
 
     // Opacity is the best way to fix the headers. Removing the fixed position breaks some layouts
@@ -52,18 +64,26 @@ class StickyFixer {
 
 let fixers = {
     'hover': fixer => new StickyFixer(fixer,
-        scrollY => scrollY / window.innerHeight > 0.1,
-        (selectors, showStyles) =>
-            [selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0; }', ...showStyles]),
+        ({defaultState}) => defaultState,
+        selectors => selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0; }'),
     'scroll': fixer => new StickyFixer(fixer,
-        (scrollY, hidden) => scrollY / window.innerHeight > 0.1 && scrollY === lastKnownScrollY ? hidden : scrollY > lastKnownScrollY,
+        ({defaultState, scrollY, oldState}) => scrollY === lastKnownScrollY && oldState
+            || scrollY < lastKnownScrollY && 'show' || defaultState,
         selectors =>
-            [selectors.join(',') + `{ opacity: 0; visibility: hidden; animation: none; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`]),
+            selectors.join(',') + `{ opacity: 0; visibility: hidden; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`),
     'top': fixer => new StickyFixer(fixer,
-        scrollY => scrollY / window.innerHeight > 0.1,
+        ({defaultState}) => defaultState,
         selectors =>
-            [selectors.join(',') + `{ opacity: 0; visibility: hidden; animation: none; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`])
+            selectors.join(',') + `{ opacity: 0; visibility: hidden; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`)
 };
+
+function getDocumentHeight() {
+    // http://james.padolsey.com/javascript/get-document-height-cross-browser/
+    let body = document.body, html = document.documentElement;
+    return Math.max(
+        body.scrollHeight, body.offsetHeight, body.clientHeight,
+        html.scrollHeight, html.offsetHeight, html.clientHeight);
+}
 
 let log = (...args) => isDevelopment && console.log("Sticky Ducky: ", ...args);
 let measure = (label, f) => {
@@ -238,7 +258,7 @@ function doAll(forceExplore, forceUpdate) {
     let threshold = exploration.lastScrollY < window.innerHeight ? 0.25 : 0.5;
     let isFar = Math.abs(exploration.lastScrollY - scrollY) / window.innerHeight > threshold;
     if (isFar || exploration.limit > 0 || forceExplore) {
-        let newStickies = measure('explore', () => explore(newStickies => newStickies.length && stickyFixer && stickyFixer.onChange(scrollY, true, stickyFixer.hidden)));
+        let newStickies = measure('explore', () => explore(newStickies => newStickies.length && stickyFixer && stickyFixer.onChange(scrollY, true, true)));
         forceUpdate |= newStickies.length > 0;
         isFar ? ((exploration.limit = 1) && (exploration.lastScrollY = scrollY)) : exploration.limit--;
     }
@@ -246,11 +266,11 @@ function doAll(forceExplore, forceUpdate) {
     lastKnownScrollY = scrollY;
 }
 
-chrome.storage.local.get('behavior', response => {
+chrome.storage.local.get(['behavior', 'isDevelopment'], response => {
+    isDevelopment = !!response.isDevelopment;
     // Hover works only when the client uses a mouse. If the device has touch capabilities, choose scroll
-    let behavior = response.behavior || DetectIt.deviceType === 'mouseOnly' ? 'hover' : 'scroll';
-    if (!response.behavior) chrome.storage.local.set({'behavior': behavior});
+    let behavior = response.behavior || (DetectIt.deviceType === 'mouseOnly' ? 'hover' : 'scroll');
+    log(`Behavior from storage ${response.behavior}; Device type ${DetectIt.deviceType}; `);
     skipEvent(document.readyState !== 'loading', document, 'DOMContentLoaded', () => updateBehavior(behavior));
 });
 chrome.storage.onChanged.addListener(changes => updateBehavior(changes.behavior.newValue));
-chrome.storage.local.get('isDevelopment', response => isDevelopment = !!response.isDevelopment);

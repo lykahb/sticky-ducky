@@ -1,0 +1,35 @@
+{
+  "manifest_version": 2,
+  "name": "Sticky Ducky",
+  "author": "Boris Lykah",
+  "description": "Cleans pages of the sticky elements and shows them when needed",
+  "version": "1.0.6",
+  "permissions": [
+    "tabs",
+    "storage",
+    "<all_urls>"
+  ],
+  "browser_action": {
+    "default_popup": "popup.html",
+    "default_icon": "assets/icon48.png"
+  },
+  "icons": {
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "lib/detectIt-3.0.3.js",
+        "lib/underscore-1.8.3.js",
+        "lib/css-selector-generator-1.0.4.js",
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}
