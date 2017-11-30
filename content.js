@@ -119,7 +119,7 @@ function classify(el) {
 let skipEvent = (isReady, obj, event, action) => isReady ? action() : obj.addEventListener(event, action, false);
 
 function updateBehavior(behavior) {
-    log(behavior);
+    log(`Setting behavior ${behavior}`);
     let isActive = stickyFixer !== null;
     let scrollCandidates = [window, document.body];
     if (behavior !== 'always') {
@@ -129,8 +129,8 @@ function updateBehavior(behavior) {
             [0, 500, 1000, 2000].forEach(t => setTimeout(() => doAll(true, false), t));
         });
         document.readyState === 'complete' && doAll(true, true);
-        let options = DetectIt && DetectIt.passiveEvents && {passive: true}; // Firefox bug, DetectIt may be not available
-        !isActive && scrollCandidates.forEach(target => target.addEventListener('scroll', scrollListener, options));
+        // Detecting passive events on Firefox and setting the listener immediately is buggy. Manifest supports only browsers that have it.
+        !isActive && scrollCandidates.forEach(target => target.addEventListener('scroll', scrollListener, {passive: true}));
     } else if (isActive && behavior === 'always') {
         scrollCandidates.forEach(target => target.removeEventListener('scroll', scrollListener));
         stickyFixer.stylesheet && stickyFixer.stylesheet.ownerNode.remove();
