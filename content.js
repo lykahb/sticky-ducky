@@ -195,7 +195,7 @@ function explore(asyncCallback) {
                     sheets.selectors.add(rule.selectorText);
                 } else if (rule.type === CSSRule.MEDIA_RULE || rule.type === CSSRule.SUPPORTS_RULE) {
                     exploreRules(rule.cssRules);
-                } else if (rule.type === CSSRule.IMPORT_RULE) {
+                } else if (rule.type === CSSRule.IMPORT_RULE && rule.styleSheet) {
                     exploreStylesheet(rule.styleSheet);
                 }
             });
