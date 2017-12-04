@@ -183,8 +183,8 @@ function explore(asyncCallback) {
         }
 
         let exploreStylesheet = sheet => {
-            if (sheets.exploredSheets.includes(sheet)) return;
-            sheets.exploredSheets.push(sheet);
+            if (sheets.exploredSheets.find(x => x === (sheet.href || sheet))) return;
+            sheets.exploredSheets.push(sheet.href || sheet);
             let cssRules = null;
             try {
                 cssRules = sheet.cssRules;
