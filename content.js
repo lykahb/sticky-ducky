@@ -169,7 +169,7 @@ function explore(asyncCallback) {
     });
     let exploreSelectors = () => {
         let selector = [...exploration.stylesheets.selectors, '*[style*="fixed" i]', '*[style*="sticky" i]'].join(',');
-        let newStickies = _.difference(document.body.querySelectorAll(selector), _.pluck(exploredStickies, 'el')).map(makeStickyObj);
+        let newStickies = _.difference(document.querySelectorAll(selector), _.pluck(exploredStickies, 'el')).map(makeStickyObj);
         newStickies.length && exploredStickies.push(...newStickies);
         log("exploredStickies", exploredStickies);
         return newStickies;
@@ -239,7 +239,7 @@ function doAll(forceExplore, forceUpdate) {
         // An element may be moved elsewhere, removed and returned to DOM later. It tries to recover them by selector.
         let els = s.selector && document.querySelectorAll(s.selector);
         let isUnique = els && els.length === 1;
-        let isInDOM = document.body.contains(s.el);
+        let isInDOM = document.contains(s.el);
         let update = (key, value) => {
             if (s[key] !== value) {
                 forceUpdate = true;
