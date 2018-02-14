@@ -1,8 +1,5 @@
 *.py[cod]
 
-# C extensions
-*.so
-
 # Packages
 *.egg
 *.eggs
@@ -11,36 +8,9 @@ dist
 build
 eggs
 parts
-.pydistutils.cfg
-bin
-var
-sdist
-develop-eggs
-.installed.cfg
-lib64
 
 # Installer logs
 pip-log.txt
-
-# Unit test / coverage reports
-.coverage
-.tox
-nosetests.xml
-junit.xml
-coverage.xml
-tests/functional/output_html/
-
-# Mr Developer
-.mr.developer.cfg
-.project
-.pydevproject
-
-# Compiled CSS
-*.css
-.sass-cache/*
-createweb/static/.sass-cache/
-*.scssc
-*.sass-cache*
 
 *.DS_store
 
