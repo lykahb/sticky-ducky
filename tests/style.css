@@ -1,0 +1,10 @@
+body {
+    background-color: yellowgreen;
+    height: 800em;
+}
+
+.stickyContent {
+    width: 100%;
+    height: 3em;
+    background-color: black;
+}

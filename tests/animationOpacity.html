@@ -1,0 +1,32 @@
+<!-- If animation is disabled, the header becomes active but invisible -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .stickyContent {
+            position: fixed;
+        }
+        @keyframes appear {
+            0% {
+                opacity: 0;
+                transform: translateY(-10px)
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateY(0)
+            }
+        }
+        .header {
+            top: 0;
+            opacity: 0;
+            animation: appear 334ms cubic-bezier(0,0,.2,1) .15s forwards
+        }
+    </style>
+</head>
+<body>
+<div class="stickyContent header"></div>
+</div>
+</body>
+</html>
