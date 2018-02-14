@@ -37,7 +37,7 @@ class StickyFixer {
             let allSels = stickies.map(s => s.selector),
                 rules = [];
             if (stickies.length) {
-                rules.push(allSels.join(',') + `{ transition: opacity ${transDuration}s ease-in-out; animation: none; }`);  // Show style
+                rules.push(allSels.join(',') + `{ transition: opacity ${transDuration}s ease-in-out; }`);  // Show style
                 let whatToHide = newState === 'hide' && allSels
                     || newState === 'showFooters' && stickies.filter(s => s.type !== 'footer').map(s => s.selector)
                     || [];
@@ -65,16 +65,16 @@ class StickyFixer {
 let fixers = {
     'hover': fixer => new StickyFixer(fixer,
         ({defaultState}) => defaultState,
-        selectors => selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0; }'),
+        selectors => selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0; animation: none; }'),
     'scroll': fixer => new StickyFixer(fixer,
         ({defaultState, scrollY, oldState}) => scrollY === lastKnownScrollY && oldState
             || scrollY < lastKnownScrollY && 'show' || defaultState,
         selectors =>
-            selectors.join(',') + `{ opacity: 0; visibility: hidden; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`),
+            selectors.join(',') + `{ opacity: 0; visibility: hidden; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; animation: none; }`),
     'top': fixer => new StickyFixer(fixer,
         ({defaultState}) => defaultState,
         selectors =>
-            selectors.join(',') + `{ opacity: 0; visibility: hidden; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; }`)
+            selectors.join(',') + `{ opacity: 0; visibility: hidden; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; animation: none; }`)
 };
 
 function getDocumentHeight() {
