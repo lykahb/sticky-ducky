@@ -13,7 +13,7 @@ There is experimental support for the mobile devices.
 As more websites I visit started putting sticky junk on the page, it got annoying. All solutions I found were doing similar things: removing fixed elements from DOM or setting display to none, searching them with the inline style, required user input to block an element.
 
 I wanted an extension that would never break website layout and do its job automatically. So I created a simple one that hid the headers on several news websites.
-Later this year after https://daringfireball.net/2017/06/medium_dickbars was published on Hacker News, I realized that a lot of people feel the same way and may want to use it too.
+Later that year after https://daringfireball.net/2017/06/medium_dickbars was published on Hacker News, I realized that a lot of people feel the same way and may want to use it too.
 So, after several rounds of rewrites and polishing it's ready for release. Enjoy!
 
 ## Installation
@@ -21,3 +21,11 @@ So, after several rounds of rewrites and polishing it's ready for release. Enjoy
 [Chrome Store](https://chrome.google.com/webstore/detail/sticky-ducky/gklhneccajklhledmencldobkjjpnhkd)
 
 [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sticky-ducky/)
+
+## Support development
+
+If you'd like to support this project, please send examples of websites with unusual stickies, pull requests, issues, or donate to
+
+[Patreon](https://www.patreon.com/lykahb)
+
+Bitcoin 1NGxD7QgSYgWmuFSi7yKbWMGH4f9cA1dTK
