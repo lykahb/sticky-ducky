@@ -1,11 +1,10 @@
 let isDevelopment = false;
 let exploration = {
-    limit: 2,
-    lastScrollY: 0,
-    stylesheets: {
-        exploredSheets: [],
-        selectors: new Set(),
-    }
+    limit: 2,  // Limit for exploration on shorter scroll distance
+    lastScrollY: 0,  // Keeps track of the scroll position during the last exploration
+    sheets: [],  // Top level stylesheets along with metadata
+    sheetSet: new Set(),  // Top level stylesheets
+    selectors: new Set()  // Selectors for the rules that make element sticky
 };
 let lastKnownScrollY = undefined;
 let stickyFixer = null;
@@ -168,65 +167,84 @@ function explore(asyncCallback) {
         status: isFixedPos(window.getComputedStyle(el).position) ? 'fixed' : 'unfixed'
     });
     let exploreSelectors = () => {
-        let selector = [...exploration.stylesheets.selectors, '*[style*="fixed" i]', '*[style*="sticky" i]'].join(',');
+        let selector = [...exploration.selectors, '*[style*="fixed" i]', '*[style*="sticky" i]'].join(',');
         let newStickies = _.difference(document.querySelectorAll(selector), _.pluck(exploredStickies, 'el')).map(makeStickyObj);
         newStickies.length && exploredStickies.push(...newStickies);
         log("exploredStickies", exploredStickies);
         return newStickies;
     };
     let exploreStylesheets = () => {
-        let sheets = exploration.stylesheets;
         let asyncStylesheets = [];
-        if (sheets.exploredSheets.length === document.styleSheets.length
-            && _.last(sheets.exploredSheets) === _.last(document.styleSheets)) {
-            return;
-        }
 
-        let exploreStylesheet = sheet => {
-            if (sheets.exploredSheets.find(x => x === (sheet.href || sheet))) return;
-            sheets.exploredSheets.push(sheet.href || sheet);
+        let exploreStylesheet = sheetInfo => {
+            let sheet = sheetInfo.sheet;
             let cssRules = null;
             try {
                 cssRules = sheet.cssRules;
             } catch (e) {
             }
+            // Compare by href to prevent multiple fetching if several links have the same href
+
             let exploreRules = rules => _.forEach(rules, rule => {
                 if (rule.type === CSSRule.STYLE_RULE && isFixedPos(rule.style.position)) {
-                    sheets.selectors.add(rule.selectorText);
+                    exploration.selectors.add(rule.selectorText);
                 } else if (rule.type === CSSRule.MEDIA_RULE || rule.type === CSSRule.SUPPORTS_RULE) {
                     exploreRules(rule.cssRules);
                 } else if (rule.type === CSSRule.IMPORT_RULE && rule.styleSheet) {
-                    exploreStylesheet(rule.styleSheet);
+                    exploreStylesheet({sheet: rule.styleSheet});
                 }
             });
-            if (cssRules !== null) {
+            if (cssRules) {
+                sheetInfo.rulesCount = cssRules.length;
                 exploreRules(cssRules);
-            } else if (sheet.href) {  // Bypass the CORS restrictions
-                // TODO: This may cause extra requests. Look into 'only-if-cached' and
-                // handle the cases when the stylesheet is already being downloaded for the page.
+            } else if (sheet.href) {
+                // Bypass the CORS restrictions
+                // TODO: This may cause extra requests. Look into 'only-if-cached'
+                let iframe;
                 asyncStylesheets.push(fetch(sheet.href, {method: 'GET', cache: 'force-cache'})
                     .then(response => response.ok ? response.text() : Promise.reject('Bad response'))
                     .then(text => {
-                        let iframe = document.createElement('iframe');
+                        iframe = document.createElement('iframe');
                         iframe.style.display = 'none';  // Isolate stylesheet to prevent reflow
                         document.body.appendChild(iframe);
                         let iframeDoc = iframe.contentDocument;
                         let base = sheet.href.trim().toLowerCase().indexOf('data:') === 0 ? sheet.ownerNode.baseURI : sheet.href;
-                        base && (iframeDoc.head.appendChild(iframeDoc.createElement('base')).href = base);  // For @import
+                        if (base) (iframeDoc.head.appendChild(iframeDoc.createElement('base')).href = base);  // For @import
                         let style = iframeDoc.head.appendChild(iframeDoc.createElement('style'));
                         style.textContent = text;
                         exploreRules(style.sheet.cssRules);
-                        iframe.remove();
                     })
-                    .catch(err => log(`Error downloading stylesheet ${sheet.href}: ${err}`)));
+                    .catch(err => log(`Error downloading stylesheet ${sheet.href}: ${err}`))
+                    .finally(() => iframe && iframe.remove()));
             }
         };
-        _.forEach(document.styleSheets, exploreStylesheet);
+
+        let anyRemoved = false;
+        exploration.sheets.forEach(sheetInfo => {
+            let sheet = sheetInfo.sheet;
+            let isAlive = sheet => sheet && (!!sheet.ownerNode || isAlive(sheet.parentStyleSheet));
+            if (!isAlive(sheet)) {  // The stylesheet has been removed.
+                sheetInfo.removed = anyRemoved = true;
+                exploration.sheetSet.delete(sheet);
+            } else if (!sheet.href && sheet !== stickyFixer.stylesheet && sheetInfo.rulesCount !== sheet.cssRules.length) {
+                // Stylesheets can be updated dynamically. It is detected by comparing rules size.
+                exploreStylesheet(sheetInfo);
+            }
+        });
+        if (anyRemoved) exploration.sheets = exploration.sheets.filter(sheetInfo => !sheetInfo.removed);
+
+        _.forEach(document.styleSheets, sheet => {
+            if (exploration.sheetSet.has(sheet)) return;
+            exploration.sheetSet.add(sheet);
+            let sheetInfo = {sheet: sheet};
+            exploration.sheets.push(sheetInfo);
+            exploreStylesheet(sheetInfo);
+        });
         return asyncStylesheets.length && Promise.all(asyncStylesheets);
     };
-    let async = exploreStylesheets();
-    async && async.then(exploreSelectors).then(asyncCallback);
-    return exploreSelectors();
+    let async = measure('exploreStylesheets', exploreStylesheets);
+    if (async) async.then(exploreSelectors).then(asyncCallback);
+    return measure('exploreSelectors', exploreSelectors);
 }
 
 function doAll(forceExplore, forceUpdate) {
@@ -259,7 +277,7 @@ function doAll(forceExplore, forceUpdate) {
     let threshold = exploration.lastScrollY < window.innerHeight ? 0.25 : 0.5;
     let isFar = Math.abs(exploration.lastScrollY - scrollY) / window.innerHeight > threshold;
     if (isFar || exploration.limit > 0 || forceExplore) {
-        let newStickies = measure('explore', () => explore(newStickies => newStickies.length && stickyFixer && stickyFixer.onChange(scrollY, true, true)));
+        let newStickies = explore(newStickies => newStickies.length && stickyFixer && stickyFixer.onChange(scrollY, true, true));
         forceUpdate |= newStickies.length > 0;
         isFar ? ((exploration.limit = 1) && (exploration.lastScrollY = scrollY)) : exploration.limit--;
     }
