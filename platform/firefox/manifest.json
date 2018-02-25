@@ -3,7 +3,7 @@
   "name": "Sticky Ducky",
   "author": "Boris Lykah",
   "description": "Cleans pages of the sticky elements and shows them when needed",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "applications": {
     "gecko": {
       "id": "sticky-ducky@addons.mozilla.org",
