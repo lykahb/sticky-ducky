@@ -8,10 +8,11 @@ let exploration = {
 };
 let lastKnownScrollY = undefined;
 let stickyFixer = null;
+let currentBehavior = null;
 let exploredStickies = [];
-let scrollListener = _.debounce(_.throttle(() => doAll(), 300), 1); // Debounce delay makes it run after the page scroll listeners
+let scrollListener = _.debounce(_.throttle(() => doAll(), 300), 1);  // Debounce delay makes it run after the page scroll listeners
 let transDuration = 0.2;
-let typesToShow = ['sidebar', 'splash', 'hidden']; // Dimensions of a hidden element are unknown
+let typesToShow = ['sidebar', 'splash', 'hidden'];  // Dimensions of a hidden element are unknown
 let selectorGenerator = new CssSelectorGenerator();
 
 class StickyFixer {
@@ -115,26 +116,25 @@ function classify(el) {
         || 'widget';
 }
 
-let skipEvent = (isReady, obj, event, action) => isReady ? action() : obj.addEventListener(event, action, false);
-
-function updateBehavior(behavior) {
-    log(`Setting behavior ${behavior}`);
-    let isActive = stickyFixer !== null;
+function activateBehavior() {
+    log(`Activating behavior ${currentBehavior}`);
+    let isActive = !!stickyFixer;  // Presence of stickyFixer indicates that the scroll listener is set
     let scrollCandidates = [window, document.body];
-    if (behavior !== 'always') {
-        stickyFixer = fixers[behavior](stickyFixer);
-        skipEvent(document.readyState === 'complete', window, 'load', () => {
-            // Run several times waiting for JS on the page to do all changes
-            [0, 500, 1000, 2000].forEach(t => setTimeout(() => doAll(true, false), t));
-        });
-        document.readyState === 'complete' && doAll(true, true);
+    if (currentBehavior !== 'always') {
         // Detecting passive events on Firefox and setting the listener immediately is buggy. Manifest supports only browsers that have it.
         !isActive && scrollCandidates.forEach(target => target.addEventListener('scroll', scrollListener, {passive: true}));
-    } else if (isActive && behavior === 'always') {
+        stickyFixer = fixers[currentBehavior](stickyFixer);
+        doAll(true, true);
+    } else if (isActive && currentBehavior === 'always') {
         scrollCandidates.forEach(target => target.removeEventListener('scroll', scrollListener));
         stickyFixer.stylesheet && stickyFixer.stylesheet.ownerNode.remove();
         stickyFixer = null;
     }
+}
+
+function updateBehavior(behavior) {
+    currentBehavior = behavior;
+    if (document.readyState !== 'loading') activateBehavior();
 }
 
 // This liberal comparison picks up "FiXeD !important" or "-webkit-sticky" positions
@@ -290,6 +290,11 @@ chrome.storage.local.get(['behavior', 'isDevelopment'], response => {
     // Hover works only when the client uses a mouse. If the device has touch capabilities, choose scroll
     let behavior = response.behavior || (DetectIt.deviceType === 'mouseOnly' ? 'hover' : 'scroll');
     log(`Behavior from storage ${response.behavior}; Device type ${DetectIt.deviceType}; `);
-    skipEvent(document.readyState !== 'loading', document, 'DOMContentLoaded', () => updateBehavior(behavior));
+    updateBehavior(behavior);
+    document.addEventListener('DOMContentLoaded', activateBehavior, false);
+    document.addEventListener('readystatechange', () => {
+        // Run several times waiting for JS on the page to do the changes affecting scrolling and stickies
+        [0, 500, 1000, 2000].forEach(t => setTimeout(() => stickyFixer && doAll(true, false), t));
+    });
 });
 chrome.storage.onChanged.addListener(changes => updateBehavior(changes.behavior.newValue));
