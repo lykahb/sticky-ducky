@@ -1,0 +1,23 @@
+<!--Two elements with the same class force selector use nth-child. After a new element is inserted,
+the selector remains unique but hides a wrong element-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .stickyContent {
+            position: fixed;
+        }
+    </style>
+    <script>
+        setTimeout(() => {
+            let div = document.createElement('div');
+            document.body.insertBefore(div, document.body.childNodes[0])
+        }, 1000);
+    </script>
+</head>
+<body>
+<div class="stickyContent"></div>
+<div class="stickyContent" style="display: none"></div>
+</body>
+</html>
