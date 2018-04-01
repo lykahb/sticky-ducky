@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+	<dict>
+		<key>Key</key>
+		<string>behavior</string>
+		<key>Title</key>
+		<string>When to show sticky elements</string>
+		<key>Titles</key>
+		<array>
+			<string>When hovering over</string>
+			<string>After scrolling up</string>
+			<string>On top of the page</string>
+			<string>Always (disable extension)</string>
+		</array>
+		<key>Type</key>
+		<string>ListBox</string>
+		<key>Values</key>
+		<array>
+			<string>hover</string>
+			<string>scroll</string>
+			<string>top</string>
+			<string>always</string>
+		</array>
+	</dict>
+	<dict>
+		<key>Key</key>
+		<string>isDevelopment</string>
+	</dict>
+</array>
+</plist>

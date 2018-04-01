@@ -9,7 +9,14 @@
             color: black;
             font-family: Helvetica, Arial, sans-serif;
             font-size: 14px;
-            width: 200px;
+            width: 100%;
+            overflow: hidden;
+            border: 0;
+            float: left;
+            margin: 0;
+            opacity: 1;
+            padding: 0;
+            white-space: nowrap;
         }
         h1 {
             display: flex;
@@ -53,7 +60,9 @@
     <span data-behavior="always">Always (disable extension)</span>
 </div>
 
+<script type="application/javascript" src="lib/underscore-1.8.3.js"></script>
 <script type="application/javascript" src="lib/detectIt-3.0.3.js"></script>
+<script type="application/javascript" src="vapiBackground.js"></script>
 <script type="application/javascript" src="popup.js"></script>
 </body>
 </html>

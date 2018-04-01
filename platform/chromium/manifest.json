@@ -18,6 +18,13 @@
     "48": "assets/icon48.png",
     "128": "assets/icon128.png"
   },
+  "background": {
+    "scripts": [
+      "vapiBackground.js",
+      "explorer.js",
+      "background.js"
+    ]
+  },
   "content_scripts": [
     {
       "matches": [
@@ -28,6 +35,8 @@
         "lib/detectIt-3.0.3.js",
         "lib/underscore-1.8.3.js",
         "lib/css-selector-generator-1.0.4.js",
+        "vapiInjected.js",
+        "explorer.js",
         "content.js"
       ],
       "run_at": "document_start"

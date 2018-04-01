@@ -1,4 +1,5 @@
-let isDevelopment = false;
+'use strict';
+let isDevelopment = true;
 let exploration = {
     limit: 2,  // Limit for exploration on shorter scroll distance
     lastScrollY: 0,  // Keeps track of the scroll position during the last exploration
@@ -137,8 +138,6 @@ function updateBehavior(behavior) {
     if (document.readyState !== 'loading') activateBehavior();
 }
 
-// This liberal comparison picks up "FiXeD !important" or "-webkit-sticky" positions
-let isFixedPos = p => p.toLowerCase().indexOf('fixed') >= 0 || p.toLowerCase().indexOf('sticky') >= 0;
 let highSpecificitySelector = el => {
     // there is always the unique selector since we use nthchild.
     let {selectors, element} = selectorGenerator.getSelectorObjects(el);
@@ -159,67 +158,29 @@ let highSpecificitySelector = el => {
     return booster + selectors.map(sel => selectorGenerator.stringifySelectorObject(sel)).join(' > ');
 };
 
-function explore(asyncCallback) {
-    let makeStickyObj = el => ({
-        el: el,
-        type: classify(el),
-        selector: highSpecificitySelector(el),
-        status: isFixedPos(window.getComputedStyle(el).position) ? 'fixed' : 'unfixed'
-    });
-    let exploreSelectors = () => {
-        let selector = [...exploration.selectors, '*[style*="fixed" i]', '*[style*="sticky" i]'].join(',');
-        let newStickies = _.difference(document.querySelectorAll(selector), _.pluck(exploredStickies, 'el')).map(makeStickyObj);
-        newStickies.length && exploredStickies.push(...newStickies);
-        log("exploredStickies", exploredStickies);
-        return newStickies;
-    };
+let exploreStickies = () => {
+    let selector = [...exploration.selectors, '*[style*="fixed" i]', '*[style*="sticky" i]'].join(',');
+    let newStickies = _.difference(document.querySelectorAll(selector), _.pluck(exploredStickies, 'el')).map(makeStickyObj);
+    if (newStickies.length) exploredStickies.push(...newStickies);
+    log("exploredStickies", exploredStickies);
+    return newStickies;
+};
+
+let makeStickyObj = el => ({
+    el: el,
+    type: classify(el),
+    selector: highSpecificitySelector(el),
+    status: isFixedPos(window.getComputedStyle(el).position) ? 'fixed' : 'unfixed'
+});
+
+function explore() {
     let exploreStylesheets = () => {
-        let asyncStylesheets = [];
-
-        let exploreStylesheet = sheetInfo => {
-            let sheet = sheetInfo.sheet;
-            let cssRules = null;
-            try {
-                cssRules = sheet.cssRules;
-            } catch (e) {
-            }
-            // Compare by href to prevent multiple fetching if several links have the same href
-
-            let exploreRules = rules => _.forEach(rules, rule => {
-                if (rule.type === CSSRule.STYLE_RULE && isFixedPos(rule.style.position)) {
-                    exploration.selectors.add(rule.selectorText);
-                } else if (rule.type === CSSRule.MEDIA_RULE || rule.type === CSSRule.SUPPORTS_RULE) {
-                    exploreRules(rule.cssRules);
-                } else if (rule.type === CSSRule.IMPORT_RULE && rule.styleSheet) {
-                    exploreStylesheet({sheet: rule.styleSheet});
-                }
-            });
-            if (cssRules) {
-                sheetInfo.rulesCount = cssRules.length;
-                exploreRules(cssRules);
-            } else if (sheet.href) {
-                // Bypass the CORS restrictions
-                // TODO: This may cause extra requests. Look into 'only-if-cached'
-                let iframe;
-                asyncStylesheets.push(fetch(sheet.href, {method: 'GET', cache: 'force-cache'})
-                    .then(response => response.ok ? response.text() : Promise.reject('Bad response'))
-                    .then(text => {
-                        iframe = document.createElement('iframe');
-                        iframe.style.display = 'none';  // Isolate stylesheet to prevent reflow
-                        document.body.appendChild(iframe);
-                        let iframeDoc = iframe.contentDocument;
-                        let base = sheet.href.trim().toLowerCase().indexOf('data:') === 0 ? sheet.ownerNode.baseURI : sheet.href;
-                        if (base) (iframeDoc.head.appendChild(iframeDoc.createElement('base')).href = base);  // For @import
-                        let style = iframeDoc.head.appendChild(iframeDoc.createElement('style'));
-                        style.textContent = text;
-                        exploreRules(style.sheet.cssRules);
-                    })
-                    .catch(err => log(`Error downloading stylesheet ${sheet.href}: ${err}`))
-                    .finally(() => iframe && iframe.remove()));
-            }
+        let anyRemoved = false;
+        let onFetchFail = (href, baseURI, err) => {
+            log('Fetch failed', href, baseURI, err);
+            vAPI.sendToBackground('exploreSheet', {href: href, baseURI: baseURI});
         };
 
-        let anyRemoved = false;
         exploration.sheets.forEach(sheetInfo => {
             let sheet = sheetInfo.sheet;
             let isAlive = sheet => sheet && (!!sheet.ownerNode || isAlive(sheet.parentStyleSheet));
@@ -228,7 +189,7 @@ function explore(asyncCallback) {
                 exploration.sheetSet.delete(sheet);
             } else if (!sheet.href && sheet !== stickyFixer.stylesheet && sheetInfo.rulesCount !== sheet.cssRules.length) {
                 // Stylesheets can be updated dynamically. It is detected by comparing rules size.
-                exploreStylesheet(sheetInfo);
+                exploreStylesheet(exploration.selectors, sheetInfo, onFetchFail);
             }
         });
         if (anyRemoved) exploration.sheets = exploration.sheets.filter(sheetInfo => !sheetInfo.removed);
@@ -238,13 +199,19 @@ function explore(asyncCallback) {
             exploration.sheetSet.add(sheet);
             let sheetInfo = {sheet: sheet};
             exploration.sheets.push(sheetInfo);
-            exploreStylesheet(sheetInfo);
+            exploreStylesheet(exploration.selectors, sheetInfo, onFetchFail);
         });
-        return asyncStylesheets.length && Promise.all(asyncStylesheets);
     };
-    let async = measure('exploreStylesheets', exploreStylesheets);
-    if (async) async.then(exploreSelectors).then(asyncCallback);
-    return measure('exploreSelectors', exploreSelectors);
+    measure('exploreStylesheets', exploreStylesheets);
+    return measure('exploreStickies', exploreStickies);
+}
+
+function onNewSelectors(selectors) {
+    if (selectors.size === 0) return;
+    let oldSize = exploration.selectors.size;
+    selectors.forEach(s => exploration.selectors.add(s));
+    if (stickyFixer && exploration.selectors.size > oldSize && exploreStickies().length)
+        stickyFixer.onChange(scrollY, true, true);
 }
 
 function doAll(forceExplore, forceUpdate) {
@@ -277,24 +244,33 @@ function doAll(forceExplore, forceUpdate) {
     let threshold = exploration.lastScrollY < window.innerHeight ? 0.25 : 0.5;
     let isFar = Math.abs(exploration.lastScrollY - scrollY) / window.innerHeight > threshold;
     if (isFar || exploration.limit > 0 || forceExplore) {
-        let newStickies = explore(newStickies => newStickies.length && stickyFixer && stickyFixer.onChange(scrollY, true, true));
+        let newStickies = explore();
         forceUpdate |= newStickies.length > 0;
-        isFar ? ((exploration.limit = 1) && (exploration.lastScrollY = scrollY)) : exploration.limit--;
+        if (isFar) {
+            exploration.limit = 1;
+            exploration.lastScrollY = scrollY;
+        } else exploration.limit--;
     }
     stickyFixer.onChange(scrollY, forceUpdate);
     lastKnownScrollY = scrollY;
 }
 
-chrome.storage.local.get(['behavior', 'isDevelopment'], response => {
-    isDevelopment = !!response.isDevelopment;
+function init(settings) {
+    isDevelopment = !!settings.isDevelopment;
+    log(`Behavior from storage ${settings.behavior}; Device type ${DetectIt.deviceType}; `);
     // Hover works only when the client uses a mouse. If the device has touch capabilities, choose scroll
-    let behavior = response.behavior || (DetectIt.deviceType === 'mouseOnly' ? 'hover' : 'scroll');
-    log(`Behavior from storage ${response.behavior}; Device type ${DetectIt.deviceType}; `);
+    let behavior = settings.behavior || (DetectIt.deviceType === 'mouseOnly' ? 'hover' : 'scroll');
     updateBehavior(behavior);
     document.addEventListener('DOMContentLoaded', activateBehavior, false);
     document.addEventListener('readystatechange', () => {
         // Run several times waiting for JS on the page to do the changes affecting scrolling and stickies
         [0, 500, 1000, 2000].forEach(t => setTimeout(() => stickyFixer && doAll(true, false), t));
     });
-});
-chrome.storage.onChanged.addListener(changes => updateBehavior(changes.behavior.newValue));
+}
+
+if (window.top === window) {  // Don't do anything within an iframe
+    vAPI.listen('settings', settings => init(settings));
+    vAPI.listen('settingsChanged', message => updateBehavior(message.behavior));
+    vAPI.listen('sheetExplored', message => onNewSelectors(message.selectors));
+    vAPI.sendToBackground('getSettings', {});
+}
