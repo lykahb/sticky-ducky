@@ -9,22 +9,35 @@
             color: black;
             font-family: Helvetica, Arial, sans-serif;
             font-size: 14px;
-            width: 100%;
+            width: 210px;
             overflow: hidden;
             border: 0;
             float: left;
-            margin: 0;
+            margin: 0 0.5em;
             opacity: 1;
             padding: 0;
-            white-space: nowrap;
+            /*white-space: nowrap;*/
         }
-        h1 {
+
+        .header {
             display: flex;
             align-items: center;
+            font-size: 2em;
+            font-weight: bold;
+            margin: 0.5rem 0;
         }
-        h1 > img {
+
+        .header > img {
             margin-right: 0.5em;
-            height: 2em;
+            margin-left: 1em;
+            height: 1.8em;
+        }
+
+        .description {
+            text-align: center;
+            font-size: 1.2em;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
         }
 
         #options {
@@ -32,27 +45,31 @@
             flex-direction: column;
         }
 
+        #options > span:hover {
+            --alpha: 0.8;
+        }
+
         #options > .active {
-            background-color: #5e9fbd;
+            background-color: rgba(94, 159, 189, var(--alpha, 1));
         }
 
         #options > .active[data-behavior='always'] {
-            background-color: #ce6668;
+            background-color: rgba(206, 102, 104, var(--alpha, 1));
         }
 
         #options > span {
             line-height: 2em;
             height: 2em;
             padding-left: 1em;
+            background-color: rgba(207, 213, 216, var(--alpha, 1));
             margin-bottom: 0.5em;
-            background-color: #cfd5d8;
             cursor: default;
         }
     </style>
 </head>
 <body>
-<h1><img src="assets/iconBasic.svg">Sticky Ducky</h1>
-<h3>When to show sticky elements:</h3>
+<div class="header"><img src="assets/iconBasic.svg"><span>Sticky Ducky</span></div>
+<div class="description">When to show sticky elements:</div>
 <div id="options">
     <span data-behavior="hover">When hovering over</span>
     <span data-behavior="scroll">After scrolling up</span>
