@@ -20,6 +20,7 @@
   },
   "background": {
     "scripts": [
+      "lib/underscore-1.8.3.js",
       "vapiBackground.js",
       "explorer.js",
       "background.js"

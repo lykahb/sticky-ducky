@@ -176,11 +176,10 @@ let makeStickyObj = el => ({
 function explore() {
     let exploreStylesheets = () => {
         let anyRemoved = false;
-        let onFetchFail = (href, baseURI, err) => {
+        let explorer = new Explorer((href, baseURI, err) => {
             log('Fetch failed', href, baseURI, err);
             vAPI.sendToBackground('exploreSheet', {href: href, baseURI: baseURI});
-        };
-
+        });
         exploration.sheets.forEach(sheetInfo => {
             let sheet = sheetInfo.sheet;
             let isAlive = sheet => sheet && (!!sheet.ownerNode || isAlive(sheet.parentStyleSheet));
@@ -189,7 +188,7 @@ function explore() {
                 exploration.sheetSet.delete(sheet);
             } else if (!sheet.href && sheet !== stickyFixer.stylesheet && sheetInfo.rulesCount !== sheet.cssRules.length) {
                 // Stylesheets can be updated dynamically. It is detected by comparing rules size.
-                exploreStylesheet(exploration.selectors, sheetInfo, onFetchFail);
+                explorer.exploreStylesheet(sheetInfo);
             }
         });
         if (anyRemoved) exploration.sheets = exploration.sheets.filter(sheetInfo => !sheetInfo.removed);
@@ -199,15 +198,17 @@ function explore() {
             exploration.sheetSet.add(sheet);
             let sheetInfo = {sheet: sheet};
             exploration.sheets.push(sheetInfo);
-            exploreStylesheet(exploration.selectors, sheetInfo, onFetchFail);
+            explorer.exploreStylesheet(sheetInfo);
         });
+        explorer.selectors.forEach(s => exploration.selectors.add(s));
+        explorer.wait().then(onNewSelectors);
     };
     measure('exploreStylesheets', exploreStylesheets);
     return measure('exploreStickies', exploreStickies);
 }
 
 function onNewSelectors(selectors) {
-    if (selectors.size === 0) return;
+    if (selectors.length === 0) return;
     let oldSize = exploration.selectors.size;
     selectors.forEach(s => exploration.selectors.add(s));
     if (stickyFixer && exploration.selectors.size > oldSize && exploreStickies().length)
