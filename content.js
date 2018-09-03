@@ -3,9 +3,10 @@ let isDevelopment = true;
 let exploration = {
     limit: 2,  // Limit for exploration on shorter scroll distance
     lastScrollY: 0,  // Keeps track of the scroll position during the last exploration
-    sheets: [],  // Top level stylesheets along with metadata
-    sheetSet: new Set(),  // Top level stylesheets
-    selectors: new Set()  // Selectors for the rules that make element sticky
+    // Storing the DOM nodes rather than stylesheet objects reduces memory consumption.
+    internalSheets: [],  // Internal top level stylesheets along with metadata
+    sheetNodeSet: new Set(),  // Owner nodes of all top level stylesheets
+    selectors: new Set(['*[style*="fixed" i]', '*[style*="sticky" i]'])  // Selectors for the rules that make element sticky
 };
 let lastKnownScrollY = undefined;
 let stickyFixer = null;
@@ -159,7 +160,7 @@ let highSpecificitySelector = el => {
 };
 
 let exploreStickies = () => {
-    let selector = [...exploration.selectors, '*[style*="fixed" i]', '*[style*="sticky" i]'].join(',');
+    let selector = [...exploration.selectors].join(',');
     let newStickies = _.difference(document.querySelectorAll(selector), _.pluck(exploredStickies, 'el')).map(makeStickyObj);
     if (newStickies.length) exploredStickies.push(...newStickies);
     log("exploredStickies", exploredStickies);
@@ -170,8 +171,13 @@ let makeStickyObj = el => ({
     el: el,
     type: classify(el),
     selector: highSpecificitySelector(el),
+    stickySelectors: getStickySelectors(el), // Selectors. May be empty in case position is defined indirectly (animation, etc)
     status: isFixedPos(window.getComputedStyle(el).position) ? 'fixed' : 'unfixed'
 });
+
+function getStickySelectors(el) {
+    return _.filter(exploration.selectors, selector => el.matches(selector));
+}
 
 function explore() {
     let exploreStylesheets = () => {
@@ -180,25 +186,33 @@ function explore() {
             log('Fetch failed', href, baseURI, err);
             vAPI.sendToBackground('exploreSheet', {href: href, baseURI: baseURI});
         });
-        exploration.sheets.forEach(sheetInfo => {
-            let sheet = sheetInfo.sheet;
-            let isAlive = sheet => sheet && (!!sheet.ownerNode || isAlive(sheet.parentStyleSheet));
-            if (!isAlive(sheet)) {  // The stylesheet has been removed.
+        // We detect dynamic updates for the internal stylesheets by comparing rules size.
+        // All internal (declared with <style>) stylesheets have cssRules available.
+        // Updates to external and imported stylesheets are not checked.
+        exploration.internalSheets.forEach(sheetInfo => {
+            let ownerNode = sheetInfo.ownerNode;
+            if (!document.contains(ownerNode)) {  // The stylesheet has been removed.
                 sheetInfo.removed = anyRemoved = true;
-                exploration.sheetSet.delete(sheet);
-            } else if (!sheet.href && sheet !== stickyFixer.stylesheet && sheetInfo.rulesCount !== sheet.cssRules.length) {
-                // Stylesheets can be updated dynamically. It is detected by comparing rules size.
-                explorer.exploreStylesheet(sheetInfo);
+                exploration.sheetNodeSet.delete(ownerNode);
+                return;
+            }
+            if (sheetInfo.rulesCount !== ownerNode.sheet.cssRules.length) {
+                explorer.exploreStylesheet(ownerNode.sheet);
+                sheetInfo.rulesCount = ownerNode.sheet.cssRules.length;
             }
         });
-        if (anyRemoved) exploration.sheets = exploration.sheets.filter(sheetInfo => !sheetInfo.removed);
+        if (anyRemoved) exploration.internalSheets = exploration.internalSheets.filter(sheetInfo => !sheetInfo.removed);
 
         _.forEach(document.styleSheets, sheet => {
-            if (exploration.sheetSet.has(sheet)) return;
-            exploration.sheetSet.add(sheet);
-            let sheetInfo = {sheet: sheet};
-            exploration.sheets.push(sheetInfo);
-            explorer.exploreStylesheet(sheetInfo);
+            if (sheet === stickyFixer.stylesheet ||
+                !sheet.ownerNode ||
+                exploration.sheetNodeSet.has(sheet.ownerNode)) return;
+            exploration.sheetNodeSet.add(sheet.ownerNode);
+            if (!sheet.href) {
+                let sheetInfo = {ownerNode: sheet.ownerNode, rulesCount: sheet.cssRules.length};
+                exploration.internalSheets.push(sheetInfo);
+            }
+            explorer.exploreStylesheet(sheet);
         });
         explorer.selectors.forEach(s => exploration.selectors.add(s));
         explorer.wait().then(onNewSelectors);
