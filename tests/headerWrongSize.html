@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- hbr.org -->
+    <!-- The header rect has height zero. The classifier falls back to scrollHeight.
+     The header node includes a large menu that is hidden with opacity: 0. -->
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .header {
+            position: fixed;
+            overflow: visible;
+            left: 0;
+            top: 0;
+        }
+        .stickyContent {
+            position: absolute;
+            width: 80em;
+        }
+    </style>
+</head>
+<body>
+<div class="header">
+    <div class="stickyContent"></div>
+</div>
+</body>
+</html>
