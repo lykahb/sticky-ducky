@@ -3,7 +3,7 @@
   "name": "Sticky Ducky",
   "author": "Boris Lykah",
   "description": "Cleans pages of the sticky elements and shows them when needed",
-  "version": "1.1",
+  "version": "1.2",
   "applications": {
     "gecko": {
       "id": "sticky-ducky@addons.mozilla.org",
@@ -26,8 +26,10 @@
   "background": {
     "scripts": [
       "lib/underscore-1.8.3.js",
-      "explorer.js",
+      "lib/detectIt-3.0.3.js",
       "vapiBackground.js",
+      "explorer.js",
+      "whitelist.js",
       "background.js"
     ]
   },
@@ -38,7 +40,6 @@
         "https://*/*"
       ],
       "js": [
-        "lib/detectIt-3.0.3.js",
         "lib/underscore-1.8.3.js",
         "lib/css-selector-generator-1.0.4.js",
         "vapiInjected.js",

@@ -28,5 +28,15 @@
 		<key>Key</key>
 		<string>isDevelopment</string>
 	</dict>
+	<dict>
+		<key>Key</key>
+		<string>whitelist</string>
+		<key>Password</key>
+		<false/>
+		<key>Title</key>
+		<string>Whitelist</string>
+		<key>Type</key>
+		<string>TextField</string>
+	</dict>
 </array>
 </plist>

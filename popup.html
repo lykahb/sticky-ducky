@@ -45,7 +45,7 @@
             flex-direction: column;
         }
 
-        #options > span:hover {
+        button:hover {
             --alpha: 0.8;
         }
 
@@ -57,29 +57,57 @@
             background-color: rgba(206, 102, 104, var(--alpha, 1));
         }
 
-        #options > span {
-            line-height: 2em;
-            height: 2em;
-            padding-left: 1em;
+        button {
             background-color: rgba(207, 213, 216, var(--alpha, 1));
             margin-bottom: 0.5em;
             cursor: default;
+            padding: 0.5em;
+            border: none;
+            font-size: inherit;
+        }
+
+        #settingsTab > textarea {
+            resize: none;
+            width: 100%;
+            padding: 0px;
+            outline: none;
+            border-color: black;
+            border-width: 1px;
+            height: 15em;
+        }
+
+        #errorMessage {
+            color: red;
         }
     </style>
 </head>
 <body>
 <div class="header"><img src="assets/iconBasic.svg"><span>Sticky Ducky</span></div>
-<div class="description">When to show sticky elements:</div>
-<div id="options">
-    <span data-behavior="hover">When hovering over</span>
-    <span data-behavior="scroll">After scrolling up</span>
-    <span data-behavior="top">On top of the page</span>
-    <span data-behavior="always">Always (disable extension)</span>
+<div id="mainTab">
+    <div class="description">When to show sticky elements:</div>
+    <div id="options">
+        <button data-behavior="hover">When hovering over</button>
+        <button data-behavior="scroll">After scrolling up</button>
+        <button data-behavior="top">On top of the page</button>
+        <button data-behavior="always">Always (disable extension)</button>
+    </div>
+    <button id="settingsButton">Settings</button>
+</div>
+<div id="settingsTab" style="display: none">
+    <div style="font-weight: bold;">Whitelist</div>
+    <div>Ignore the stickies on the sites and individual pages in this list. One entry per line. See <a href="https://github.com/lykahb/sticky-ducky#settings">here</a> for the format details.</div>
+    <textarea id="whitelist" autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" wrap="off"></textarea>
+    <div id="errorMessage" style="display: none;">Error with definitions</div>
+    <div>
+        <button id="cancel">Cancel</button>
+        <button id="save">Save</button>
+    </div>
 </div>
 
 <script type="application/javascript" src="lib/underscore-1.8.3.js"></script>
 <script type="application/javascript" src="lib/detectIt-3.0.3.js"></script>
 <script type="application/javascript" src="vapiBackground.js"></script>
+<script type="application/javascript" src="whitelist.js"></script>
 <script type="application/javascript" src="popup.js"></script>
 </body>
 </html>

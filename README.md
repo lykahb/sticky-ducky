@@ -21,6 +21,27 @@ hid the headers on several news websites.
 Later that year after https://daringfireball.net/2017/06/medium_dickbars was published on Hacker News, I realized that a
 lot of people feel the same way and may want to use it too. So, after several rounds of rewrites and polishing it's ready for release. Enjoy!
 
+## Settings
+
+### Modes of hiding stickies
+Some sticky elements like navigation may be useful to display. Sticky Ducky lets you do it quickly.
+* When hovering over. This requires a pointer and is not recommended on the touch screen devices.
+* After scrolling up. This works on mobile devices too.
+* On top of the page. This settings is the least likely to show the stickies when not needed. 
+* Always. This is similar to disabling extension. 
+
+### Whitelist
+You can whitelist the sticky elements on the websites or individual pages. 
+The whitelist rules support a limited subset of [Adblock Plus filters format](https://adblockplus.org/filter-cheatsheet).
+Notably, the wildcards are currently not supported.
+
+* You can whitelist by an address part: `/checkout` or `.jira.` will whitelist the stickies on any domain if the URL has that pattern.
+* By domain name: `||corp.com` whitelists everything on `https://corp.com/index.html` and `https://mail.corp.com/index.html`
+* By the exact address `|https://bugtracker.corp.com/secure/|`
+
+All URL patterns can be combined with the individual selectors:
+For example, with the entry `||bugtracker.corp.com###header` Sticky Ducky would ignore the header on every page of the bugtracker.corp.com but treat the other stickies as usual.
+
 ## Installation
 
 [Chrome Store](https://chrome.google.com/webstore/detail/sticky-ducky/gklhneccajklhledmencldobkjjpnhkd)

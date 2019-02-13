@@ -2,18 +2,20 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
     <dict>
+        <key>Author</key>
+        <string>Boris Lykah</string>
         <key>Builder Version</key>
         <string>13605.1.33.1.2</string>
         <key>CFBundleDisplayName</key>
         <string>StickyDucky</string>
         <key>CFBundleIdentifier</key>
-        <string>com.yourcompany.stickyducky</string>
+        <string>com.stickyducky</string>
         <key>CFBundleInfoDictionaryVersion</key>
         <string>6.0</string>
         <key>CFBundleShortVersionString</key>
-        <string>1.0</string>
+        <string>1.2</string>
         <key>CFBundleVersion</key>
-        <string>1</string>
+        <string>1.2</string>
         <key>Chrome</key>
         <dict>
             <key>Database Quota</key>
@@ -26,7 +28,7 @@
                     <key>Filename</key>
                     <string>popup.html</string>
                     <key>Height</key>
-                    <integer>268</integer>
+                    <integer>400</integer>
                     <key>Identifier</key>
                     <string>popup</string>
                     <key>Width</key>
@@ -57,13 +59,14 @@
                 <array>
                     <string>lib/css-selector-generator-1.0.4.js</string>
                     <string>lib/underscore-1.8.3.js</string>
-                    <string>lib/detectIt-3.0.3.js</string>
                     <string>vapiInjected.js</string>
                     <string>explorer.js</string>
                     <string>content.js</string>
                 </array>
             </dict>
         </dict>
+        <key>Description</key>
+        <string>Cleans pages of the sticky elements and shows them when needed</string>
         <key>DeveloperIdentifier</key>
         <string>0000000000</string>
         <key>ExtensionInfoDictionaryVersion</key>

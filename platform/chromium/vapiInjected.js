@@ -11,7 +11,11 @@
         getListeners(request.name).map(handler => handler(request.message));
     });
     chrome.storage.onChanged.addListener(changes => {
-        let settings = _.mapObject(changes, change => change.newValue);
-        getListeners('settingsChanged').map(listener => listener(settings))
+        // Don't pass the raw text whitelist
+        let settings = _.pick(changes, 'isDevelopment', 'behavior');
+        settings = _.mapObject(changes, change => change.newValue);
+        if (!_.isEmpty(settings)) {
+            getListeners('settingsChanged').map(listener => listener(settings));
+        }
     });
 })(this);

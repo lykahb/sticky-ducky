@@ -1,5 +1,4 @@
 'use strict';
-let isDevelopment = true;
 let exploration = {
     limit: 2,  // Limit for exploration on shorter scroll distance
     lastScrollY: 0,  // Keeps track of the scroll position during the last exploration
@@ -10,11 +9,19 @@ let exploration = {
 };
 let lastKnownScrollY = undefined;
 let stickyFixer = null;
-let currentBehavior = null;
+let settings = {
+    // This a reference for the settings structure. The values will be updated.
+    isDevelopment: true,
+    behavior: 'hover',
+    whitelist: {
+        type: 'none', // ['none', 'page', 'selectors']
+        selectors: [] // optional, if the type is 'selectors'
+    }
+};
 let exploredStickies = [];
 let scrollListener = _.debounce(_.throttle(() => doAll(), 300), 1);  // Debounce delay makes it run after the page scroll listeners
 let transDuration = 0.2;
-let typesToShow = ['sidebar', 'splash', 'hidden'];  // Dimensions of a hidden element are unknown
+let typesToShow = ['sidebar', 'splash', 'hidden'];  // Hidden may mean that dimensions of a hidden element are unknown
 let selectorGenerator = new CssSelectorGenerator();
 
 class StickyFixer {
@@ -87,9 +94,9 @@ function getDocumentHeight() {
         html.scrollHeight, html.offsetHeight, html.clientHeight);
 }
 
-let log = (...args) => isDevelopment && console.log("Sticky Ducky: ", ...args);
+let log = (...args) => settings.isDevelopment && console.log("Sticky Ducky: ", ...args);
 let measure = (label, f) => {
-    if (!isDevelopment) return f();
+    if (!settings.isDevelopment) return f();
     let before = window.performance.now();
     let result = f();
     let after = window.performance.now();
@@ -118,50 +125,62 @@ function classify(el) {
         || 'widget';
 }
 
-function activateBehavior() {
-    log(`Activating behavior ${currentBehavior}`);
+function onNewSettings(newSettings) {
+    // The new settings may contain only the updated properties
+    _.extend(settings, newSettings);
+    activateSettings();
+}
+
+function activateSettings() {
+    if (document.readyState === 'loading') return;
+    log(`Activating behavior ${settings.behavior}`);
     let isActive = !!stickyFixer;  // Presence of stickyFixer indicates that the scroll listener is set
     let scrollCandidates = [window, document.body];
-    if (currentBehavior !== 'always') {
+    if (settings.behavior !== 'always' && settings.whitelist.type !== 'page') {
         // Detecting passive events on Firefox and setting the listener immediately is buggy. Manifest supports only browsers that have it.
-        !isActive && scrollCandidates.forEach(target => target.addEventListener('scroll', scrollListener, {passive: true}));
-        stickyFixer = fixers[currentBehavior](stickyFixer);
+        if(!isActive) {
+            scrollCandidates.forEach(target => target.addEventListener('scroll', scrollListener, {passive: true}));
+        }
+        stickyFixer = fixers[settings.behavior](stickyFixer);
         doAll(true, true);
-    } else if (isActive && currentBehavior === 'always') {
+    } else if (isActive && settings.behavior === 'always') {
         scrollCandidates.forEach(target => target.removeEventListener('scroll', scrollListener));
         stickyFixer.stylesheet && stickyFixer.stylesheet.ownerNode.remove();
         stickyFixer = null;
     }
 }
 
-function updateBehavior(behavior) {
-    currentBehavior = behavior;
-    if (document.readyState !== 'loading') activateBehavior();
-}
-
 let highSpecificitySelector = el => {
-    // there is always the unique selector since we use nthchild.
+    // There is always the unique selector since we use nth-child.
     let {selectors, element} = selectorGenerator.getSelectorObjects(el);
-    let idWithinSelector = () => selectors.find(s => s.id && (s.id = s.id + s.id));
+    let boostId = () => selectors.find(s => s.id && (s.id = s.id + s.id));
     let ascendantId = () => {
         let directParent = element.parentElement;
         for (let el = directParent; el; el = el.parentElement) {
             let sel = selectorGenerator.getIdSelector(el);
             if (sel) return sel + (el === directParent ? ' > ' : ' ');
         }
+        return '';
     };
-    let classesWithinSelector = () => {
-        let list = null;
-        selectors.find(s => list = s.class || s.attribute) && list.push(...list);
+    let boostClassesOrAttributes = () => {
+        let selector = selectors.find(s => s.class || s.attribute);
+        let list = selector && (selector.class || selector.attribute);
+        if (list) list.push(...list);
     };
-    let booster = '';
-    idWithinSelector() || (booster = ascendantId() || '') || classesWithinSelector();
-    return booster + selectors.map(sel => selectorGenerator.stringifySelectorObject(sel)).join(' > ');
+    // Increase specificity of the selector
+    boostId() || boostClassesOrAttributes();
+    return ascendantId() + selectors.map(sel => selectorGenerator.stringifySelectorObject(sel)).join(' > ');
 };
 
 let exploreStickies = () => {
     let selector = [...exploration.selectors].join(',');
-    let newStickies = _.difference(document.querySelectorAll(selector), _.pluck(exploredStickies, 'el')).map(makeStickyObj);
+    let oldStickies = _.pluck(exploredStickies, 'el');
+    let potentialEls = document.querySelectorAll(selector);
+    if (settings.whitelist.type === 'selectors') {
+        let isInWhitelist = el => settings.whitelist.selectors.some(s => el.matches(s));
+        potentialEls = _.filter(potentialEls, el => !isInWhitelist(el));
+    }
+    let newStickies = _.filter(potentialEls, el => !oldStickies.includes(el)).map(makeStickyObj);
     if (newStickies.length) exploredStickies.push(...newStickies);
     log("exploredStickies", exploredStickies);
     return newStickies;
@@ -171,7 +190,8 @@ let makeStickyObj = el => ({
     el: el,
     type: classify(el),
     selector: highSpecificitySelector(el),
-    stickySelectors: getStickySelectors(el), // Selectors. May be empty in case position is defined indirectly (animation, etc)
+    // Selectors for the rules that make the element sticky. May be empty in case position is defined indirectly (animation, etc)
+    stickySelectors: getStickySelectors(el),
     status: isFixedPos(window.getComputedStyle(el).position) ? 'fixed' : 'unfixed'
 });
 
@@ -214,8 +234,8 @@ function explore() {
             }
             explorer.exploreStylesheet(sheet);
         });
-        explorer.selectors.forEach(s => exploration.selectors.add(s));
-        explorer.wait().then(onNewSelectors);
+        onNewSelectors(explorer.selectors);
+        explorer.wait().then(onNewSelectors);  // Add the selectors found asynchronously
     };
     measure('exploreStylesheets', exploreStylesheets);
     return measure('exploreStickies', exploreStickies);
@@ -224,6 +244,9 @@ function explore() {
 function onNewSelectors(selectors) {
     if (selectors.length === 0) return;
     let oldSize = exploration.selectors.size;
+    if (settings.whitelist.type === 'selectors') {
+        selectors = selectors.filter(s => !settings.whitelist.selectors.includes(s));
+    }
     selectors.forEach(s => exploration.selectors.add(s));
     if (stickyFixer && exploration.selectors.size > oldSize && exploreStickies().length)
         stickyFixer.onChange(scrollY, true, true);
@@ -271,21 +294,19 @@ function doAll(forceExplore, forceUpdate) {
 }
 
 function init(settings) {
-    isDevelopment = !!settings.isDevelopment;
-    log(`Behavior from storage ${settings.behavior}; Device type ${DetectIt.deviceType}; `);
-    // Hover works only when the client uses a mouse. If the device has touch capabilities, choose scroll
-    let behavior = settings.behavior || (DetectIt.deviceType === 'mouseOnly' ? 'hover' : 'scroll');
-    updateBehavior(behavior);
-    document.addEventListener('DOMContentLoaded', activateBehavior, false);
+    log(`Behavior from storage ${settings.behavior}`);
+    onNewSettings(settings);
+    document.addEventListener('DOMContentLoaded', activateSettings);
     document.addEventListener('readystatechange', () => {
         // Run several times waiting for JS on the page to do the changes affecting scrolling and stickies
-        [0, 500, 1000, 2000].forEach(t => setTimeout(() => stickyFixer && doAll(true, false), t));
+        [0, 500].forEach(t => setTimeout(() => stickyFixer && doAll(true, false), t));
     });
 }
 
 if (window.top === window) {  // Don't do anything within an iframe
     vAPI.listen('settings', settings => init(settings));
-    vAPI.listen('settingsChanged', message => updateBehavior(message.behavior));
+    vAPI.listen('settingsChanged', settings => onNewSettings(settings));
     vAPI.listen('sheetExplored', message => onNewSelectors(message.selectors));
-    vAPI.sendToBackground('getSettings', {});
+    vAPI.sendToBackground('getSettings',
+        {location: _.pick(window.location, 'href', 'host', 'hostname', 'port', 'origin', 'pathname', 'protocol')});
 }
