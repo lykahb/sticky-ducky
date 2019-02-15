@@ -3,24 +3,28 @@
 <head>
     <!-- hbr.org -->
     <!-- The header rect has height zero. The classifier falls back to scrollHeight.
-     The header node includes a large menu that is hidden with opacity: 0. -->
+     The header node includes a large submenu that is hidden. If the header is set to 100% height, the visible size will be misjudged too -->
     <link rel="stylesheet" href="style.css">
     <style>
         .header {
             position: fixed;
-            overflow: visible;
-            left: 0;
             top: 0;
+            height: 0;
+            width: 100%;
         }
-        .stickyContent {
+
+        .bigBox {
             position: absolute;
-            width: 80em;
+            visibility: hidden;
+            width: 40em;
+            height: 40em;
         }
     </style>
 </head>
 <body>
 <div class="header">
     <div class="stickyContent"></div>
+    <div class="bigBox"></div>
 </div>
 </body>
 </html>
