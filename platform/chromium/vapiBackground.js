@@ -6,7 +6,6 @@
 
     vAPI.getSettings = (keys, callback) => chrome.storage.local.get(keys, callback);
     vAPI.updateSettings = settings => chrome.storage.local.set(settings);
-    vAPI.closePopup = () => window.close();
     vAPI.onPopupOpen = callback => callback();
     vAPI.sendSettings = () => null;  // Client gets the message from the Storage onChange
     vAPI.listen = (name, listener) => getListeners(name).push(listener);

@@ -6,10 +6,6 @@
 
     vAPI.getSettings = (keys, callback) => callback(_.pick(safari.extension.settings, keys));
     vAPI.updateSettings = settings => _.extend(safari.extension.settings, settings);
-    vAPI.closePopup = function() {
-        let popover = safari.extension.popovers[0];
-        if (popover) popover.hide();
-    };
     vAPI.onPopupOpen = callback => safari.application.addEventListener("popover", callback, true);
     vAPI.sendSettings = function(message) {
         safari.application.browserWindows.map(window => window.tabs.map(tab => {

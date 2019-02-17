@@ -33,23 +33,27 @@ function setListeners() {
     });
 }
 
+function init() {
+    vAPI.getSettings('behavior', settings => {
+        let behavior = settings.behavior;
+        if (!initialized) {
+            setListeners();
+            initialized = true;
+        }
+
+        // Necessary if open again
+        let activeOption = document.querySelector(`#options > button.active`);
+        if (activeOption) activeOption.classList.remove('active');
+
+        if (behavior) {
+            document.querySelector(`#options > button[data-behavior=${behavior}]`).classList.add('active');
+        }
+        resetViews();
+    });
+}
+
 // On FF and Chrome the popup window is closed. On Safari the window persists. This function must be idempotent.
-vAPI.onPopupOpen(() => vAPI.getSettings('behavior', settings => {
-    let behavior = settings.behavior;
-    if (!initialized) {
-        setListeners();
-        initialized = true;
-    }
-
-    // Necessary if open again
-    let activeOption = document.querySelector(`#options > button.active`);
-    if (activeOption) activeOption.classList.remove('active');
-    resetViews();
-
-    if (behavior) {
-        document.querySelector(`#options > button[data-behavior=${behavior}]`).classList.add('active');
-    }
-}));
+vAPI.onPopupOpen(init);
 
 // These listeners could be replaced with promises on updateSettings
 vAPI.listen('invalidSettings', (message, sendResponse) => {
@@ -57,7 +61,4 @@ vAPI.listen('invalidSettings', (message, sendResponse) => {
     document.getElementById('errorMessage').innerText = message;
 });
 
-vAPI.listen('acceptedSettings', (message, sendResponse) => {
-    resetViews();
-    vAPI.closePopup();
-});
+vAPI.listen('acceptedSettings', init);

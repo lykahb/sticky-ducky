@@ -6,7 +6,6 @@
 
     vAPI.getSettings = (keys, callback) => browser.storage.local.get(keys, callback);
     vAPI.updateSettings = settings => browser.storage.local.set(settings);
-    vAPI.closePopup = () => window.close();
     vAPI.onPopupOpen = callback => callback();
     vAPI.sendSettings = () => null;  // Client gets the message from the Storage onChange
     vAPI.listen = (name, listener) => getListeners(name).push(listener);

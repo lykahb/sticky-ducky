@@ -13,7 +13,7 @@
     browser.storage.onChanged.addListener(changes => {
         // Don't pass the raw text whitelist
         let settings = _.pick(changes, 'isDevelopment', 'behavior');
-        settings = _.mapObject(changes, change => change.newValue);
+        settings = _.mapObject(settings, change => change.newValue);
         if (!_.isEmpty(settings)) {
             getListeners('settingsChanged').map(listener => listener(settings));
         }

@@ -26,20 +26,27 @@ vAPI.getSettings(['whitelist', 'behavior', 'isDevelopment'], settingsResponse =>
 });
 
 vAPI.listen('updateSettings', (message, sendResponse) => {
+    // Apply settings to the settings object
     if (message.whitelist) {
         try {
             settings.whitelist = parseRules(message.whitelist);
         } catch (e) {
+            // TODO: replace with promise
             sendResponse('invalidSettings', e.message);
             return;
         }
     }
+    if (message.behavior) {
+        settings.behavior = message.behavior;
+    }
+
     vAPI.updateSettings(message);
-    _.extend(settings, message);
+
     // Update all tabs only if the behavior changed.
     if (message.behavior) {
         vAPI.sendSettings({behavior: message.behavior});
     }
+    // TODO: replace with promise
     sendResponse('acceptedSettings');
 });
 vAPI.listen('exploreSheet', (message, sendResponse) => {

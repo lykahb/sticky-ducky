@@ -8,7 +8,7 @@ prepare:
 firefox: DIST := ${DIST}/firefox
 firefox: prepare
 	cp platform/firefox/* ${DIST}
-	cd ${DIST}; zip -r StickyDucky.zip *
+	cd ${DIST}; zip -r sticky-ducky@addons.mozilla.org.xpi *
 
 chromium: DIST := ${DIST}/chromium
 chromium: prepare
