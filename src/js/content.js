@@ -33,7 +33,8 @@ class StickyFixer {
     }
 
     onChange(scrollY, forceUpdate, keepState) {
-        let stickies = exploredStickies.filter(s => s.status === 'fixed' && !typesToShow.includes(s.type));
+        let stickies = exploredStickies.filter(s =>
+            s.status === 'fixed' && !typesToShow.includes(s.type) && !s.isWhitelisted);
         let input = {
             scrollY: scrollY,
             oldState: this.state,
@@ -128,22 +129,26 @@ function classify(el) {
 function onNewSettings(newSettings) {
     // The new settings may contain only the updated properties
     _.extend(settings, newSettings);
-    activateSettings();
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', activateSettings);
+    } else {
+        activateSettings();
+    }
 }
 
 function activateSettings() {
-    if (document.readyState === 'loading') return;
     log(`Activating behavior ${settings.behavior}`);
     let isActive = !!stickyFixer;  // Presence of stickyFixer indicates that the scroll listener is set
+    let shouldBeActive = settings.behavior !== 'always' && settings.whitelist.type !== 'page';
     let scrollCandidates = [window, document.body];
-    if (settings.behavior !== 'always' && settings.whitelist.type !== 'page') {
+    if (shouldBeActive) {
         // Detecting passive events on Firefox and setting the listener immediately is buggy. Manifest supports only browsers that have it.
         if(!isActive) {
             scrollCandidates.forEach(target => target.addEventListener('scroll', scrollListener, {passive: true}));
         }
         stickyFixer = fixers[settings.behavior](stickyFixer);
         doAll(true, true);
-    } else if (isActive && settings.behavior === 'always') {
+    } else if (isActive && !shouldBeActive) {
         scrollCandidates.forEach(target => target.removeEventListener('scroll', scrollListener));
         stickyFixer.stylesheet && stickyFixer.stylesheet.ownerNode.remove();
         stickyFixer = null;
@@ -176,10 +181,6 @@ let exploreStickies = () => {
     let selector = [...exploration.selectors].join(',');
     let oldStickies = _.pluck(exploredStickies, 'el');
     let potentialEls = document.querySelectorAll(selector);
-    if (settings.whitelist.type === 'selectors') {
-        let isInWhitelist = el => settings.whitelist.selectors.some(s => el.matches(s));
-        potentialEls = _.filter(potentialEls, el => !isInWhitelist(el));
-    }
     let newStickies = _.filter(potentialEls, el => !oldStickies.includes(el)).map(makeStickyObj);
     if (newStickies.length) exploredStickies.push(...newStickies);
     log("exploredStickies", exploredStickies);
@@ -190,14 +191,10 @@ let makeStickyObj = el => ({
     el: el,
     type: classify(el),
     selector: highSpecificitySelector(el),
-    // Selectors for the rules that make the element sticky. May be empty in case position is defined indirectly (animation, etc)
-    stickySelectors: getStickySelectors(el),
+    isWhitelisted: settings.whitelist.type === 'selectors' 
+        && settings.whitelist.selectors.some(s => el.matches(s)),
     status: isFixedPos(window.getComputedStyle(el).position) ? 'fixed' : 'unfixed'
 });
-
-function getStickySelectors(el) {
-    return _.filter(exploration.selectors, selector => el.matches(selector));
-}
 
 function explore() {
     let exploreStylesheets = () => {
@@ -244,16 +241,14 @@ function explore() {
 function onNewSelectors(selectors) {
     if (selectors.length === 0) return;
     let oldSize = exploration.selectors.size;
-    if (settings.whitelist.type === 'selectors') {
-        selectors = selectors.filter(s => !settings.whitelist.selectors.includes(s));
-    }
     selectors.forEach(s => exploration.selectors.add(s));
     if (stickyFixer && exploration.selectors.size > oldSize && exploreStickies().length)
         stickyFixer.onChange(scrollY, true, true);
 }
 
-function doAll(forceExplore, forceUpdate) {
+function doAll(forceExplore, settingsChanged) {
     // Do nothing unless scrolled by about 5%
+    let forceUpdate = settingsChanged;
     let scrollY = window.scrollY || document.body.scrollTop;
     if (!forceExplore && !forceUpdate && Math.abs(lastKnownScrollY - scrollY) / window.innerHeight < 0.05) {
         return;
@@ -270,14 +265,18 @@ function doAll(forceExplore, forceUpdate) {
                 s[key] = value;
             }
         };
-        isInDOM && !isUnique && update('selector', highSpecificitySelector(s.el));
-        !isInDOM && isUnique && (s.el = els[0]); // Does not affect stylesheet, so no update
+        if (isInDOM && !isUnique) update('selector', highSpecificitySelector(s.el));
+        if (!isInDOM && isUnique) s.el = els[0]; // Does not affect stylesheet, so no update
         // The dimensions are unknown until it's shown
-        s.type === 'hidden' && update('type', classify(s.el));
+        if (s.type === 'hidden') update('type', classify(s.el));
         update('status', !isInDOM && !isUnique ? 'removed' :
             (isFixedPos(window.getComputedStyle(s.el).position) ? 'fixed' : 'unfixed'));
     };
-    measure('reviewStickies', () => exploredStickies.forEach(reviewSticky));
+    if (settingsChanged) {
+        exploredStickies = [];  // Clear in case whitelist rules changed
+    } else {
+        measure('reviewStickies', () => exploredStickies.forEach(reviewSticky));
+    }
     // Explore if scrolled far enough from the last explored place. Explore once again a bit closer.
     let threshold = exploration.lastScrollY < window.innerHeight ? 0.25 : 0.5;
     let isFar = Math.abs(exploration.lastScrollY - scrollY) / window.innerHeight > threshold;
@@ -293,20 +292,13 @@ function doAll(forceExplore, forceUpdate) {
     lastKnownScrollY = scrollY;
 }
 
-function init(settings) {
-    log(`Behavior from storage ${settings.behavior}`);
-    onNewSettings(settings);
-    document.addEventListener('DOMContentLoaded', activateSettings);
+if (window.top === window) {  // Don't do anything within an iframe
+    vAPI.listen('settings', settings => onNewSettings(settings));
+    vAPI.listen('sheetExplored', message => onNewSelectors(message.selectors));
+    vAPI.sendToBackground('getSettings', {location: _.omit(window.location, _.isFunction)});
+
     document.addEventListener('readystatechange', () => {
         // Run several times waiting for JS on the page to do the changes affecting scrolling and stickies
         [0, 500].forEach(t => setTimeout(() => stickyFixer && doAll(true, false), t));
     });
-}
-
-if (window.top === window) {  // Don't do anything within an iframe
-    vAPI.listen('settings', settings => init(settings));
-    vAPI.listen('settingsChanged', settings => onNewSettings(settings));
-    vAPI.listen('sheetExplored', message => onNewSelectors(message.selectors));
-    vAPI.sendToBackground('getSettings',
-        {location: _.pick(window.location, 'href', 'host', 'hostname', 'port', 'origin', 'pathname', 'protocol')});
 }

@@ -22,10 +22,10 @@
     "scripts": [
       "lib/underscore-1.8.3.js",
       "lib/detectIt-3.0.3.js",
-      "vapiBackground.js",
-      "explorer.js",
-      "whitelist.js",
-      "background.js"
+      "js/vapiBackground.js",
+      "js/explorer.js",
+      "js/whitelist.js",
+      "js/background.js"
     ]
   },
   "content_scripts": [
@@ -37,9 +37,9 @@
       "js": [
         "lib/underscore-1.8.3.js",
         "lib/css-selector-generator-1.0.4.js",
-        "vapiInjected.js",
-        "explorer.js",
-        "content.js"
+        "js/vapiInjected.js",
+        "js/explorer.js",
+        "js/content.js"
       ],
       "run_at": "document_start"
     }
