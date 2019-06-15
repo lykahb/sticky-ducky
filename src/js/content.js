@@ -11,7 +11,7 @@ let lastKnownScrollY = undefined;
 let stickyFixer = null;
 let settings = {
     // This a reference for the settings structure. The values will be updated.
-    isDevelopment: true,
+    isDevelopment: false,
     behavior: 'hover',
     whitelist: {
         type: 'none', // ['none', 'page', 'selectors']
