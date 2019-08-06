@@ -4,6 +4,7 @@ let exploration = {
     lastScrollY: 0,  // Keeps track of the scroll position during the last exploration
     // Storing the DOM nodes rather than stylesheet objects reduces memory consumption.
     internalSheets: [],  // Internal top level stylesheets along with metadata
+    externalSheets: {},  // A map where href is key and metadata is value
     sheetNodeSet: new Set(),  // Owner nodes of all top level stylesheets
     selectors: new Set(['*[style*="fixed" i]', '*[style*="sticky" i]'])  // Selectors for the rules that make element sticky
 };
@@ -95,7 +96,7 @@ function getDocumentHeight() {
         html.scrollHeight, html.offsetHeight, html.clientHeight);
 }
 
-let log = (...args) => settings.isDevelopment && console.log("Sticky Ducky: ", ...args);
+let log = (...args) => settings.isDevelopment && console.log('Sticky Ducky: ', ...args);
 let measure = (label, f) => {
     if (!settings.isDevelopment) return f();
     let before = window.performance.now();
@@ -183,7 +184,7 @@ let exploreStickies = () => {
     let potentialEls = document.querySelectorAll(selector);
     let newStickies = _.filter(potentialEls, el => !oldStickies.includes(el)).map(makeStickyObj);
     if (newStickies.length) exploredStickies.push(...newStickies);
-    log("exploredStickies", exploredStickies);
+    log('exploredStickies', exploredStickies);
     return newStickies;
 };
 
@@ -199,9 +200,14 @@ let makeStickyObj = el => ({
 function explore() {
     let exploreStylesheets = () => {
         let anyRemoved = false;
-        let explorer = new Explorer((href, baseURI, err) => {
-            log('Fetch failed', href, baseURI, err);
-            vAPI.sendToBackground('exploreSheet', {href: href, baseURI: baseURI});
+        let explorer = new Explorer(result => {
+            if (result.href && result.status == 'fail') {
+                result.status = 'awaitingBackgroundFetch';
+                vAPI.sendToBackground('exploreSheet', {
+                    href: result.href, baseURI: result.baseURI
+                });
+            }
+            onSheetExplored(result);
         });
         // We detect dynamic updates for the internal stylesheets by comparing rules size.
         // All internal (declared with <style>) stylesheets have cssRules available.
@@ -220,28 +226,55 @@ function explore() {
         });
         if (anyRemoved) exploration.internalSheets = exploration.internalSheets.filter(sheetInfo => !sheetInfo.removed);
 
+        // TODO: If the page uses Web Components the styles won't be in the document
+
         _.forEach(document.styleSheets, sheet => {
             if (sheet === stickyFixer.stylesheet ||
                 !sheet.ownerNode ||
                 exploration.sheetNodeSet.has(sheet.ownerNode)) return;
             exploration.sheetNodeSet.add(sheet.ownerNode);
-            if (!sheet.href) {
+            if (sheet.href) {
+                let sheetInfo = {status: 'unexplored'};
+                exploration.externalSheets[sheet.href] = sheetInfo;
+            } else {
                 let sheetInfo = {ownerNode: sheet.ownerNode, rulesCount: sheet.cssRules.length};
                 exploration.internalSheets.push(sheetInfo);
             }
             explorer.exploreStylesheet(sheet);
         });
-        onNewSelectors(explorer.selectors);
-        explorer.wait().then(onNewSelectors);  // Add the selectors found asynchronously
     };
     measure('exploreStylesheets', exploreStylesheets);
     return measure('exploreStickies', exploreStickies);
+}
+
+function onSheetExplored(result) {
+    if (result.status === 'success') {
+        onNewSelectors(result.selectors);
+    }
+    if (result.href) {
+        let sheetInfo;
+        if (result.status === 'fail') {
+            sheetInfo = {
+                status: 'awaitingBackgroundFetch',
+                error: result.error
+            };
+            vAPI.sendToBackground('exploreSheet', {
+                href: result.href, baseURI: result.baseURI
+            });
+        } else if (result.status === 'success') {
+            sheetInfo = {
+                status: 'success'
+            };
+        }
+        exploration.externalSheets[result.href] = sheetInfo;
+    }
 }
 
 function onNewSelectors(selectors) {
     if (selectors.length === 0) return;
     let oldSize = exploration.selectors.size;
     selectors.forEach(s => exploration.selectors.add(s));
+    // TODO: make exploration and change asynchronous
     if (stickyFixer && exploration.selectors.size > oldSize && exploreStickies().length)
         stickyFixer.onChange(scrollY, true, true);
 }
@@ -294,7 +327,7 @@ function doAll(forceExplore, settingsChanged) {
 
 if (window.top === window) {  // Don't do anything within an iframe
     vAPI.listen('settings', settings => onNewSettings(settings));
-    vAPI.listen('sheetExplored', message => onNewSelectors(message.selectors));
+    vAPI.listen('sheetExplored', message => onSheetExplored(message));
     vAPI.sendToBackground('getSettings', {location: _.omit(window.location, _.isFunction)});
 
     document.addEventListener('readystatechange', () => {
