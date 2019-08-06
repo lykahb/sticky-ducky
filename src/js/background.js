@@ -50,10 +50,10 @@ vAPI.listen('updateSettings', (message, sendResponse) => {
     sendResponse('acceptedSettings');
 });
 vAPI.listen('exploreSheet', (message, sendResponse) => {
-    let explorer = new Explorer((...err) => console.log(...err));
-    explorer.fetchStylesheet(message.href, message.baseURI);
-    // Only the JSON objects can be messaged. So selectors cannot be a Set.
-    explorer.wait().then(selectors => {
-        sendResponse('sheetExplored', {href: message.href, selectors: selectors})
+    let explorer = new Explorer(result => {
+        if (result.href || result.selectors) {
+            sendResponse('sheetExplored', result);
+        }
     });
+    explorer.fetchWrapper(message.href, message.baseURI);
 });
