@@ -25,7 +25,7 @@
   },
   "background": {
     "scripts": [
-      "lib/underscore-1.8.3.js",
+      "lib/underscore-1.9.1.js",
       "lib/detectIt-3.0.3.js",
       "js/vapiBackground.js",
       "js/explorer.js",
@@ -40,7 +40,7 @@
         "https://*/*"
       ],
       "js": [
-        "lib/underscore-1.8.3.js",
+        "lib/underscore-1.9.1.js",
         "lib/css-selector-generator-1.0.4.js",
         "js/vapiInjected.js",
         "js/explorer.js",

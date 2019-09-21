@@ -58,7 +58,7 @@
                 <key>Start</key>
                 <array>
                     <string>lib/css-selector-generator-1.0.4.js</string>
-                    <string>lib/underscore-1.8.3.js</string>
+                    <string>lib/underscore-1.9.1.js</string>
                     <string>vapiInjected.js</string>
                     <string>explorer.js</string>
                     <string>content.js</string>
