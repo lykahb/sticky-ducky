@@ -10,29 +10,30 @@ let isDataURL = url => /^\s*data:/i.test(url);
 
 class Explorer {
     constructor(onFinish) {
-        this.selectors = [];
         this.onFinish = onFinish;
     }
 
-    exploreRules(rules) {
+    exploreRules(sheet, baseURI) {
         // Returns all selectors that were synchronously explored.
-        let selectors = [], self = this;
-        function traverse(rules) {
+        let selectors = [];
+        let traverse = rules => {
             for (let rule of rules) {
                 if (rule.type === CSSRule.STYLE_RULE && isFixedPos(rule.style.position)) {
                     selectors.push(rule.selectorText);
                 } else if (rule.type === CSSRule.MEDIA_RULE || rule.type === CSSRule.SUPPORTS_RULE) {
                     traverse(rule.cssRules);
                 } else if (rule.type === CSSRule.IMPORT_RULE && rule.styleSheet) {
-                    self.exploreStylesheet(rule.styleSheet);
+                    this.exploreStylesheet(rule.styleSheet);
                 } else if (rule.type === CSSRule.IMPORT_RULE && rule.href) {
-                    self.fetchWrapper(rule.href, self.getBaseURI(rule.parentStyleSheet, false));
+                    this.fetchStylesheet(rule.href, baseURI);
                 }
             }
-        }
-        traverse(rules);
-        this.selectors.push(...selectors);
-        return selectors;
+        };
+
+        return this.getCSSRules(sheet).then(cssRules => {
+            traverse(cssRules);
+            return selectors;
+        });
     }
 
     getBaseURI(sheet, isParent) {
@@ -43,7 +44,7 @@ class Explorer {
 
     fetchStylesheet(href, baseURI) {
         // Href may be relative, absolute or data url (https://bugs.chromium.org/p/chromium/issues/detail?id=813826)
-        let absoluteURL, nestedBaseURI;
+        let absoluteURL, nestedBaseURI, iframe;
         if (isDataURL(href)) {
             [absoluteURL, nestedBaseURI] = [href, baseURI];
         } else {
@@ -54,46 +55,61 @@ class Explorer {
                 response.text() :
                 Promise.reject(`${response.status}, ${response.statusText}`))
             .then(text => {
-                let iframe = document.createElement('iframe');
-                try {
-                    iframe.style.display = 'none';  // Isolate stylesheet to prevent reflow
-                    document.body.appendChild(iframe);
-                    let iframeDoc = iframe.contentDocument;
-                    // We need base for @import with relative urls. BaseURI may be on a different domain than href.
-                    iframeDoc.head.appendChild(iframeDoc.createElement('base')).href = nestedBaseURI;
-                    let style = iframeDoc.head.appendChild(iframeDoc.createElement('style'));
-                    style.textContent = text;
-                    return this.exploreRules(style.sheet.cssRules);
-                } finally {
-                    if (iframe) iframe.remove();
-                }
+                iframe = document.createElement('iframe');
+                iframe.style.display = 'none';  // Isolate stylesheet to prevent reflow
+                document.body.appendChild(iframe);
+                let iframeDoc = iframe.contentDocument;
+                // We need base for @import with relative urls. BaseURI may be on a different domain than href.
+                iframeDoc.head.appendChild(iframeDoc.createElement('base')).href = nestedBaseURI;
+                let style = iframeDoc.head.appendChild(iframeDoc.createElement('style'));
+                style.textContent = text;
+                return this.exploreRules(style.sheet, absoluteURL);
+            })
+            .then(selectors => this.onFinish({status: 'success', selectors: selectors, href: href, baseURI: baseURI}))
+            .catch(err => this.onFinish({status: 'fail', error: String(err), href: href, baseURI: baseURI}))
+            .finally(() => {
+                if (iframe) iframe.remove();
             });
     }
 
-    fetchWrapper(href, baseURI) {
-        this.fetchStylesheet(href, baseURI)
-            .then(selectors => this.onFinish({status: 'success', href: href, baseURI: baseURI, selectors: selectors}))
-            .catch(err => this.onFinish({status: 'fail', href: href, baseURI: baseURI, error: err}));
+    getCSSRules(sheet) {
+        // There is an issue in Firefox that throws InvalidAccessError on stylesheet access until it is fully loaded.
+        // It may even happen after then iframe load event, so timeouts are to rescue.
+        return new Promise((resolve, reject) => {
+            let retryCounter = 0;
+            let tryIt = () => {
+                try {
+                    return resolve(sheet.cssRules);
+                } catch (e) {
+                    if (e.name === 'InvalidAccessError' && retryCounter++ < 3) {
+                        retryCounter++;
+                        setTimeout(tryIt, 500);
+                    } else {
+                        // Likely this is SecurityError that may appear if stylesheet is on another domain.
+                        reject(e);
+                    }
+                }
+            };
+            tryIt();
+        });
     }
 
     exploreStylesheet(sheet) {
-        let cssRules = null,
-            baseURI = sheet.href ? this.getBaseURI(sheet, false) : null;
-        try {
-            cssRules = sheet.cssRules;
-        } catch (e) {
-        }
-        if (cssRules) {
-            let selectors = this.exploreRules(cssRules);
-            if (sheet.href) {
-                this.onFinish({status: 'success', href: sheet.href, baseURI: baseURI, selectors: selectors});
-            } else if (selectors) {
-                this.onFinish({status: 'success', selectors: selectors});
-            }
-        } else if (sheet.href) {
-            this.fetchWrapper(sheet.href, baseURI);
-        } else {
-            this.onFinish({status: 'fail', error: 'Sheet does not have href or rules'});
-        }
+        let baseURI = sheet.href ? this.getBaseURI(sheet, false) : null;
+        this.exploreRules(sheet, baseURI)
+            .then(selectors => {
+                if (sheet.href) {
+                    this.onFinish({status: 'success', selectors: selectors, href: href, baseURI: baseURI});
+                } else {
+                    this.onFinish({status: 'success', selectors: selectors});
+                }
+            })
+            .catch(e => {
+                if (sheet.href) {
+                    this.fetchStylesheet(sheet.href, baseURI);
+                } else {
+                    this.onFinish({status: 'fail', error: `No href. Rules exploration failed with ${e}`});
+                }
+            });
     }
 }

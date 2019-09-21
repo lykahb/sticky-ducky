@@ -144,7 +144,7 @@ function activateSettings() {
     let scrollCandidates = [window, document.body];
     if (shouldBeActive) {
         // Detecting passive events on Firefox and setting the listener immediately is buggy. Manifest supports only browsers that have it.
-        if(!isActive) {
+        if (!isActive) {
             scrollCandidates.forEach(target => target.addEventListener('scroll', scrollListener, {passive: true}));
         }
         stickyFixer = fixers[settings.behavior](stickyFixer);
@@ -192,7 +192,7 @@ let makeStickyObj = el => ({
     el: el,
     type: classify(el),
     selector: highSpecificitySelector(el),
-    isWhitelisted: settings.whitelist.type === 'selectors' 
+    isWhitelisted: settings.whitelist.type === 'selectors'
         && settings.whitelist.selectors.some(s => el.matches(s)),
     status: isFixedPos(window.getComputedStyle(el).position) ? 'fixed' : 'unfixed'
 });
@@ -200,15 +200,7 @@ let makeStickyObj = el => ({
 function explore() {
     let exploreStylesheets = () => {
         let anyRemoved = false;
-        let explorer = new Explorer(result => {
-            if (result.href && result.status == 'fail') {
-                result.status = 'awaitingBackgroundFetch';
-                vAPI.sendToBackground('exploreSheet', {
-                    href: result.href, baseURI: result.baseURI
-                });
-            }
-            onSheetExplored(result);
-        });
+        let explorer = new Explorer(result => onSheetExplored(result));
         // We detect dynamic updates for the internal stylesheets by comparing rules size.
         // All internal (declared with <style>) stylesheets have cssRules available.
         // Updates to external and imported stylesheets are not checked.
@@ -252,21 +244,27 @@ function onSheetExplored(result) {
         onNewSelectors(result.selectors);
     }
     if (result.href) {
-        let sheetInfo;
+        let sheetInfo = exploration.externalSheets[result.href];
         if (result.status === 'fail') {
-            sheetInfo = {
-                status: 'awaitingBackgroundFetch',
-                error: result.error
-            };
-            vAPI.sendToBackground('exploreSheet', {
-                href: result.href, baseURI: result.baseURI
-            });
+            if (sheetInfo.status === 'unexplored') {
+                exploration.externalSheets[result.href] = {
+                    status: 'awaitingBackgroundFetch',
+                    error: result.error
+                };
+                vAPI.sendToBackground('exploreSheet', {
+                    href: result.href, baseURI: result.baseURI
+                });
+            } else {
+                exploration.externalSheets[result.href] = {
+                    status: 'fail',
+                    error: result.error
+                };
+            }
         } else if (result.status === 'success') {
-            sheetInfo = {
+            exploration.externalSheets[result.href] = {
                 status: 'success'
             };
         }
-        exploration.externalSheets[result.href] = sheetInfo;
     }
 }
 
@@ -274,7 +272,6 @@ function onNewSelectors(selectors) {
     if (selectors.length === 0) return;
     let oldSize = exploration.selectors.size;
     selectors.forEach(s => exploration.selectors.add(s));
-    // TODO: make exploration and change asynchronous
     if (stickyFixer && exploration.selectors.size > oldSize && exploreStickies().length)
         stickyFixer.onChange(scrollY, true, true);
 }
