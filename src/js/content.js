@@ -20,7 +20,7 @@ let settings = {
     }
 };
 let exploredStickies = [];
-let scrollListener = _.debounce(_.throttle(() => doAll(), 300), 1);  // Debounce delay makes it run after the page scroll listeners
+let scrollListener = _.debounce(_.throttle(ev => doAll(false, false, ev), 300), 1);  // Debounce delay makes it run after the page scroll listeners
 let transDuration = 0.2;
 let typesToShow = ['sidebar', 'splash', 'hidden'];  // Hidden may mean that dimensions of a hidden element are unknown
 let selectorGenerator = new CssSelectorGenerator();
@@ -33,17 +33,20 @@ class StickyFixer {
         this.hideStyles = hideStyles;
     }
 
-    onChange(scrollY, forceUpdate, keepState) {
+    onChange(scrollInfo, forceUpdate) {
         let stickies = exploredStickies.filter(s =>
-            s.status === 'fixed' && !typesToShow.includes(s.type) && !s.isWhitelisted);
-        let input = {
-            scrollY: scrollY,
-            oldState: this.state,
-            isOnTop: scrollY / window.innerHeight < 0.1,
-            isOnBottom: (getDocumentHeight() - window.scrollY) / window.innerHeight < 1.3
-        };
-        input.defaultState = input.isOnTop && 'show' || input.isOnBottom && 'showFooters' || 'hide';
-        let newState = keepState ? this.state : this.getNewState(input);
+            s.status === 'fixed' && !typesToShow.includes(s.type) && !s.isWhitelisted),
+            newState = this.state;
+        if (scrollInfo) {
+            let input = {
+                scrollY: scrollInfo.scrollY,
+                oldState: this.state,
+                isOnTop: scrollInfo.scrollY / window.innerHeight < 0.1,
+                isOnBottom: (scrollInfo.scrollHeight - scrollInfo.scrollY) / window.innerHeight < 1.3  // close to 1/3 of the last screen
+            };
+            input.defaultState = input.isOnTop && 'show' || input.isOnBottom && 'showFooters' || 'hide';
+            newState = this.getNewState(input);
+        }
         if (forceUpdate || newState !== this.state) {
             let allSels = stickies.map(s => s.selector),
                 rules = [];
@@ -52,7 +55,7 @@ class StickyFixer {
                 let whatToHide = newState === 'hide' && allSels
                     || newState === 'showFooters' && stickies.filter(s => s.type !== 'footer').map(s => s.selector)
                     || [];
-                whatToHide.length && rules.push(this.hideStyles(whatToHide));
+                if (whatToHide.length) rules.push(this.hideStyles(whatToHide));
             }
             this.updateStylesheet(rules);
             this.state = newState;
@@ -64,7 +67,6 @@ class StickyFixer {
     updateStylesheet(rules) {
         if (!this.stylesheet) {
             let style = document.head.appendChild(document.createElement('style'));
-            style.type = 'text/css';
             this.stylesheet = style.sheet;
         }
         _.map(this.stylesheet.cssRules, () => this.stylesheet.deleteRule(0));
@@ -76,19 +78,19 @@ class StickyFixer {
 let fixers = {
     'hover': fixer => new StickyFixer(fixer,
         ({defaultState}) => defaultState,
-        selectors => selectors.map(s => s + ':not(:hover)').join(',') + '{ opacity: 0; animation: none; }'),
+        selectors => `${selectors.map(s => s + ':not(:hover)').join(',')} { opacity: 0; animation: none; }`),
     'scroll': fixer => new StickyFixer(fixer,
-        ({defaultState, scrollY, oldState}) => scrollY === lastKnownScrollY && oldState
-            || scrollY < lastKnownScrollY && 'show' || defaultState,
-        selectors =>
-            selectors.join(',') + `{ opacity: 0; visibility: hidden; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; animation: none; }`),
+        ({defaultState, scrollY, oldState}) =>
+            scrollY === lastKnownScrollY && oldState
+            || scrollY < lastKnownScrollY && 'show'
+            || defaultState,
+        selectors => `${selectors.join(',')} { opacity: 0; visibility: hidden; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; animation: none; }`),
     'top': fixer => new StickyFixer(fixer,
         ({defaultState}) => defaultState,
-        selectors =>
-            selectors.join(',') + `{ opacity: 0; visibility: hidden; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; animation: none; }`)
+        selectors => `${selectors.join(',')} { opacity: 0; visibility: hidden; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; animation: none; }`)
 };
 
-function getDocumentHeight() {
+function getDocumentHeight(ev) {
     // http://james.padolsey.com/javascript/get-document-height-cross-browser/
     let body = document.body, html = document.documentElement;
     return Math.max(
@@ -141,17 +143,16 @@ function activateSettings() {
     log(`Activating behavior ${settings.behavior}`);
     let isActive = !!stickyFixer;  // Presence of stickyFixer indicates that the scroll listener is set
     let shouldBeActive = settings.behavior !== 'always' && settings.whitelist.type !== 'page';
-    let scrollCandidates = [window, document.body];
     if (shouldBeActive) {
         // Detecting passive events on Firefox and setting the listener immediately is buggy. Manifest supports only browsers that have it.
         if (!isActive) {
-            scrollCandidates.forEach(target => target.addEventListener('scroll', scrollListener, {passive: true}));
+            document.addEventListener('scroll', scrollListener, {passive: true, capture: true});
         }
         stickyFixer = fixers[settings.behavior](stickyFixer);
         doAll(true, true);
     } else if (isActive && !shouldBeActive) {
-        scrollCandidates.forEach(target => target.removeEventListener('scroll', scrollListener));
-        stickyFixer.stylesheet && stickyFixer.stylesheet.ownerNode.remove();
+        document.removeEventListener('scroll', scrollListener);
+        if (stickyFixer.stylesheet) stickyFixer.stylesheet.ownerNode.remove();
         stickyFixer = null;
     }
 }
@@ -273,15 +274,21 @@ function onNewSelectors(selectors) {
     let oldSize = exploration.selectors.size;
     selectors.forEach(s => exploration.selectors.add(s));
     if (stickyFixer && exploration.selectors.size > oldSize && exploreStickies().length)
-        stickyFixer.onChange(scrollY, true, true);
+        stickyFixer.onChange(undefined, true);
 }
 
-function doAll(forceExplore, settingsChanged) {
-    // Do nothing unless scrolled by about 5%
+function doAll(forceExplore, settingsChanged, ev) {
     let forceUpdate = settingsChanged;
-    let scrollY = window.scrollY || document.body.scrollTop;
-    if (!forceExplore && !forceUpdate && Math.abs(lastKnownScrollY - scrollY) / window.innerHeight < 0.05) {
-        return;
+    let scrollInfo;
+    if (ev) {
+        let isPageScroller = ev.target === document || ev.target.clientHeight === window.innerHeight;
+        if (!isPageScroller) return;
+        scrollInfo = {
+            scrollY: ev.target === document ? window.scrollY : ev.target.scrollTop,
+            scrollHeight: ev.target === document ? getDocumentHeight() : ev.target.scrollHeight,
+        };
+        // Do nothing unless scrolled by about 5%
+        if (lastKnownScrollY !== undefined && Math.abs(lastKnownScrollY - scrollInfo.scrollY) / window.innerHeight < 0.05) return;
     }
     let reviewSticky = s => {
         // An element may be moved elsewhere, removed and returned to DOM later. It tries to recover them by selector.
@@ -309,17 +316,20 @@ function doAll(forceExplore, settingsChanged) {
     }
     // Explore if scrolled far enough from the last explored place. Explore once again a bit closer.
     let threshold = exploration.lastScrollY < window.innerHeight ? 0.25 : 0.5;
-    let isFar = Math.abs(exploration.lastScrollY - scrollY) / window.innerHeight > threshold;
+    let isFar = scrollInfo && Math.abs(exploration.lastScrollY - scrollInfo.scrollY) / window.innerHeight > threshold;
     if (isFar || exploration.limit > 0 || forceExplore) {
         let newStickies = explore();
-        forceUpdate |= newStickies.length > 0;
+        forceUpdate = forceUpdate || newStickies.length > 0;
+        exploration.limit--;
         if (isFar) {
             exploration.limit = 1;
-            exploration.lastScrollY = scrollY;
-        } else exploration.limit--;
+            exploration.lastScrollY = scrollInfo.scrollY;
+        }
     }
-    stickyFixer.onChange(scrollY, forceUpdate);
-    lastKnownScrollY = scrollY;
+    stickyFixer.onChange(scrollInfo, forceUpdate);
+    if (scrollInfo) {
+        lastKnownScrollY = scrollInfo.scrollY;
+    }
 }
 
 if (window.top === window) {  // Don't do anything within an iframe
