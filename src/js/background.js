@@ -51,9 +51,7 @@ vAPI.listen('updateSettings', (message, sendResponse) => {
 });
 vAPI.listen('exploreSheet', (message, sendResponse) => {
     let explorer = new Explorer(result => {
-        if (result.href || result.selectors) {
-            sendResponse('sheetExplored', result);
-        }
+        sendResponse('sheetExplored', result);
     });
-    explorer.fetchWrapper(message.href, message.baseURI);
+    explorer.fetchStylesheet(message.href, message.baseURI);
 });
