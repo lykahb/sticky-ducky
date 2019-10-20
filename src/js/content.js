@@ -20,7 +20,7 @@ let settings = {
     }
 };
 let exploredStickies = [];
-let scrollListener = _.debounce(_.throttle(ev => doAll(false, false, ev), 300), 1);  // Debounce delay makes it run after the page scroll listeners
+let scrollListener = _.debounce(_.throttle(ev => doAll(false, false, ev), 300), 50);  // Debounce delay makes it run after the page scroll listeners
 let transDuration = 0.2;
 let typesToShow = ['sidebar', 'splash', 'hidden'];  // Hidden may mean that dimensions of a hidden element are unknown
 let selectorGenerator = new CssSelectorGenerator();
@@ -87,7 +87,10 @@ let fixers = {
         selectors => `${selectors.join(',')} { opacity: 0; visibility: hidden; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; animation: none; }`),
     'top': fixer => new StickyFixer(fixer,
         ({defaultState}) => defaultState,
-        selectors => `${selectors.join(',')} { opacity: 0; visibility: hidden; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; animation: none; }`)
+        selectors => `${selectors.join(',')} { opacity: 0; visibility: hidden; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; animation: none; }`),
+    'absolute': fixer => new StickyFixer(fixer,
+        ({defaultState}) => defaultState,
+        selectors => `${selectors.join(',')} { position: absolute; }`)
 };
 
 function getDocumentHeight(ev) {
