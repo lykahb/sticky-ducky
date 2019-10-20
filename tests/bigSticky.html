@@ -1,0 +1,19 @@
+<!--Sticky element takes the whole screen, while its visible part is smaller. It results in wrong classification. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .stickyContainer {
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+<div class="stickyContainer">
+    <div class="stickyContent"></div>
+</div>
+</body>
+</html>
