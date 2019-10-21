@@ -99,7 +99,7 @@ class Explorer {
         this.exploreRules(sheet, baseURI)
             .then(selectors => {
                 if (sheet.href) {
-                    this.onFinish({status: 'success', selectors: selectors, href: href, baseURI: baseURI});
+                    this.onFinish({status: 'success', selectors: selectors, href: sheet.href, baseURI: baseURI});
                 } else {
                     this.onFinish({status: 'success', selectors: selectors});
                 }
