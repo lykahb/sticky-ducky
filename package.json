@@ -1,0 +1,9 @@
+{
+    "name": "sticky-ducky",
+    "dependencies": {
+        "browserify": "^16.5.0",
+        "css-what": "3.2.1",
+        "detect-it": "3.0.3",
+        "underscore": "1.9.1"
+    }
+}

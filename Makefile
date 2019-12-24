@@ -23,3 +23,6 @@ safari: prepare
 
 clean:
 	rm -rf ${DIST}
+
+# node_modules/browserify/bin/cmd.js --require css-what --standalone CSSWhat > lib/css-what-3.2.1.js
+# node_modules/browserify/bin/cmd.js --require detect-it --standalone DetectIt > lib/detectIt-3.0.3.js
