@@ -1,7 +1,7 @@
 'use strict';
 
 // This liberal comparison picks up "FiXeD !important" or "-webkit-sticky" positions
-let isFixedPos = p => p.toLowerCase().indexOf('fixed') >= 0 || p.toLowerCase().indexOf('sticky') >= 0;
+let isFixedPosition = p => p.toLowerCase().indexOf('fixed') >= 0 || p.toLowerCase().indexOf('sticky') >= 0;
 
 let isDataURL = url => /^\s*data:/i.test(url);
 
@@ -13,13 +13,41 @@ class Explorer {
         this.onFinish = onFinish;
     }
 
+    makeSelectorDescriptions(selector, position) {
+        if (!selector.includes(':before') && !selector.includes(':after')) {
+            return [{selector: selector, position: position}];
+        }
+        // The selectors with pseudo-elements need to be separated. So in case it is comma-separated, after parsing they are split
+        let selectors = CSSWhat.parse(selector);
+        // While ::before is correct, the browsers also accept :before.
+        let process = subselects => {
+            let isPseudo = s => (s.type === 'pseudo' || s.type === 'pseudo-element') && (s.name === 'before' || s.name === 'after');
+            let pseudoElement = subselects.filter(isPseudo)[0];
+            let selectorNoPseudo = subselects.filter(s => !isPseudo(s));
+            return {
+                pseudoElement: pseudoElement ? pseudoElement.name : null,
+                selector: CSSWhat.stringify([selectorNoPseudo]),
+                position: position
+            }
+        };
+        return selectors.map(process);
+    }
+
     exploreRules(sheet, baseURI) {
         // Returns all selectors that were synchronously explored.
         let selectors = [];
         let traverse = rules => {
             for (let rule of rules) {
-                if (rule.type === CSSRule.STYLE_RULE && isFixedPos(rule.style.position)) {
-                    selectors.push(rule.selectorText);
+                if (rule.type === CSSRule.STYLE_RULE) {
+                    let position = rule.style.position.toLowerCase();
+                    if (position.includes('fixed')) {
+                        position = 'fixed';
+                    } else if (position.includes('sticky')) {
+                        position = 'sticky';
+                    } else {
+                        continue;
+                    }
+                    selectors = selectors.concat(this.makeSelectorDescriptions(rule.selectorText, position));
                 } else if (rule.type === CSSRule.MEDIA_RULE || rule.type === CSSRule.SUPPORTS_RULE) {
                     traverse(rule.cssRules);
                 } else if (rule.type === CSSRule.IMPORT_RULE && rule.styleSheet) {

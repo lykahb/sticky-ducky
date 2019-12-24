@@ -6,7 +6,12 @@ let exploration = {
     internalSheets: [],  // Internal top level stylesheets along with metadata
     externalSheets: {},  // A map where href is key and metadata is value
     sheetNodeSet: new Set(),  // Owner nodes of all top level stylesheets
-    selectors: new Set(['*[style*="fixed" i]', '*[style*="sticky" i]'])  // Selectors for the rules that make element sticky
+    selectors: {
+        fixed: [{selector: '*[style*="fixed" i]', position: 'fixed'}],
+        sticky: [{selector: '*[style*="sticky" i]', position: 'sticky'}],
+        pseudoElements: []
+    },
+
 };
 let lastKnownScrollY = undefined;
 let stickyFixer = null;
@@ -26,17 +31,16 @@ let typesToShow = ['sidebar', 'splash', 'hidden'];  // Hidden may mean that dime
 let selectorGenerator = new CssSelectorGenerator();
 
 class StickyFixer {
-    constructor(fixer, getNewState, hideStyles) {
+    constructor(fixer, getNewState, makeSelectorForHidden, hiddenStyle) {
         this.stylesheet = fixer ? fixer.stylesheet : null;
         this.state = fixer ? fixer.state : 'show'; // hide, show, showFooters
         this.getNewState = getNewState;
-        this.hideStyles = hideStyles;
+        this.makeSelectorForHidden = makeSelectorForHidden;
+        this.hiddenStyle = hiddenStyle;
     }
 
     onChange(scrollInfo, forceUpdate) {
-        let stickies = exploredStickies.filter(s =>
-            s.status === 'fixed' && !typesToShow.includes(s.type) && !s.isWhitelisted),
-            newState = this.state;
+        let state = this.state;
         if (scrollInfo) {
             let input = {
                 scrollY: scrollInfo.scrollY,
@@ -44,54 +48,97 @@ class StickyFixer {
                 isOnTop: scrollInfo.scrollY / window.innerHeight < 0.1,
                 isOnBottom: (scrollInfo.scrollHeight - scrollInfo.scrollY) / window.innerHeight < 1.3  // close to 1/3 of the last screen
             };
-            input.defaultState = input.isOnTop && 'show' || input.isOnBottom && 'showFooters' || 'hide';
-            newState = this.getNewState(input);
+            let defaultState = input.isOnTop && 'show' || input.isOnBottom && 'showFooters' || 'hide';
+            state = this.getNewState(defaultState, input);
         }
-        if (forceUpdate || newState !== this.state) {
-            let allSels = stickies.map(s => s.selector),
-                rules = [];
-            if (stickies.length) {
-                rules.push(allSels.join(',') + `{ transition: opacity ${transDuration}s ease-in-out; }`);  // Show style
-                let whatToHide = newState === 'hide' && allSels
-                    || newState === 'showFooters' && stickies.filter(s => s.type !== 'footer').map(s => s.selector)
-                    || [];
-                if (whatToHide.length) rules.push(this.hideStyles(whatToHide));
-            }
-            this.updateStylesheet(rules);
-            this.state = newState;
+        if (forceUpdate || state !== this.state) {
+            this.updateStylesheet(this.getRules(state));
+            this.state = state;
         }
     }
 
-    // Opacity is the best way to fix the headers. Removing the fixed position breaks some layouts
-    // In case the header has animation keyframes involving opacity, set animation to none
+    getRules(state) {
+        // Opacity is the best way to fix the headers. Removing the fixed position breaks some layouts.
+        // In case the element has animation keyframes involving opacity, set animation to none
+        let rules = [];
+
+        if (exploration.selectors.sticky.length) {
+            // Set all sticky elements position to initial, ignoring their classification and the show/hide settings.
+            // It is feasible because, unlike some fixed elements, they have a proper place on the page.
+            rules.push(exploration.selectors.sticky.map(s => s.selector).join(',') + makeStyle({position: 'initial'}));
+        }
+
+        if (exploration.selectors.pseudoElements.length && state !== 'show') {
+            // Hide all fixed pseudo-elements. They cannot be classified, as you can't get their bounding rect
+            let allSels = exploration.selectors.pseudoElements.map(s => s.selector);
+            rules.push(allSels.join(',') + makeStyle({transition: `opacity ${transDuration}s ease-in-out;`}));  // Show style
+            let selector = exploration.selectors.pseudoElements.map(s => `${this.makeSelectorForHidden(s.selector)}::${s.pseudoElement}`).join(',');
+            rules.push(`${selector} ${this.hiddenStyle}`);
+        }
+
+        let stickies = exploredStickies.filter(s =>
+            s.status === 'fixed' && !typesToShow.includes(s.type) && !s.isWhitelisted);
+        if (stickies.length) {
+            let allSels = stickies.map(s => s.selector);
+            rules.push(allSels.join(',') + makeStyle({transition: `opacity ${transDuration}s ease-in-out;`}));  // Show style
+            let selsToHide = state === 'hide' && allSels
+                || state === 'showFooters' && stickies.filter(s => s.type !== 'footer').map(s => s.selector)
+                || [];
+            if (selsToHide.length) {
+                let selector = selsToHide.map(this.makeSelectorForHidden).join(',');
+                rules.push(`${selector} ${this.hiddenStyle}`);
+            }
+        }
+        return rules;
+    }
+
     updateStylesheet(rules) {
         if (!this.stylesheet) {
             let style = document.head.appendChild(document.createElement('style'));
             this.stylesheet = style.sheet;
         }
+        // TODO: compare cssText against the rule and replace only mismatching rules
         _.map(this.stylesheet.cssRules, () => this.stylesheet.deleteRule(0));
-        let makeImportant = rule => rule.replace(/;/g, ' !important;');
-        rules.map(makeImportant).forEach((rule, i) => this.stylesheet.insertRule(rule, i));
+        rules.forEach(rule => this.stylesheet.insertRule(rule, this.stylesheet.cssRules.length));
     }
 }
 
 let fixers = {
     'hover': fixer => new StickyFixer(fixer,
-        ({defaultState}) => defaultState,
-        selectors => `${selectors.map(s => s + ':not(:hover)').join(',')} { opacity: 0; animation: none; }`),
+        defaultState => defaultState,
+        selector => selector + ':not(:hover)',
+        makeStyle({opacity: 0, animation: 'none'})),
     'scroll': fixer => new StickyFixer(fixer,
-        ({defaultState, scrollY, oldState}) =>
+        (defaultState, {scrollY, oldState}) =>
             scrollY === lastKnownScrollY && oldState
             || scrollY < lastKnownScrollY && 'show'
             || defaultState,
-        selectors => `${selectors.join(',')} { opacity: 0; visibility: hidden; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; animation: none; }`),
+        selector => selector,
+        makeStyle({
+            opacity: 0,
+            visibility: 'hidden',
+            transition: `opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s`,
+            animation: 'none'
+        })),
     'top': fixer => new StickyFixer(fixer,
-        ({defaultState}) => defaultState,
-        selectors => `${selectors.join(',')} { opacity: 0; visibility: hidden; transition: opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s; animation: none; }`),
+        defaultState => defaultState,
+        selector => selector,
+        makeStyle({
+            opacity: 0,
+            visibility: 'hidden',
+            transition: `opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s`,
+            animation: 'none'
+        })),
     'absolute': fixer => new StickyFixer(fixer,
-        ({defaultState}) => defaultState,
-        selectors => `${selectors.join(',')} { position: absolute; }`)
+        defaultState => defaultState,
+        selector => selector,
+        makeStyle({position: 'absolute'})),
 };
+
+function makeStyle(styles) {
+    let stylesText = Object.keys(styles).map(name => `${name}: ${styles[name]} !important;`);
+    return `{ ${stylesText.join('')} }`;
+}
 
 function getDocumentHeight(ev) {
     // http://james.padolsey.com/javascript/get-document-height-cross-browser/
@@ -183,9 +230,9 @@ let highSpecificitySelector = el => {
 };
 
 let exploreStickies = () => {
-    let selector = [...exploration.selectors].join(',');
+    let selectors = exploration.selectors.fixed.map(s => s.selector);
     let oldStickies = _.pluck(exploredStickies, 'el');
-    let potentialEls = document.querySelectorAll(selector);
+    let potentialEls = document.querySelectorAll(selectors.join(','));
     let newStickies = _.filter(potentialEls, el => !oldStickies.includes(el)).map(makeStickyObj);
     if (newStickies.length) exploredStickies.push(...newStickies);
     log('exploredStickies', exploredStickies);
@@ -198,7 +245,7 @@ let makeStickyObj = el => ({
     selector: highSpecificitySelector(el),
     isWhitelisted: settings.whitelist.type === 'selectors'
         && settings.whitelist.selectors.some(s => el.matches(s)),
-    status: isFixedPos(window.getComputedStyle(el).position) ? 'fixed' : 'unfixed'
+    status: isFixedPosition(window.getComputedStyle(el).position) ? 'fixed' : 'unfixed'
 });
 
 function explore() {
@@ -272,12 +319,26 @@ function onSheetExplored(result) {
     }
 }
 
-function onNewSelectors(selectors) {
-    if (selectors.length === 0) return;
-    let oldSize = exploration.selectors.size;
-    selectors.forEach(s => exploration.selectors.add(s));
-    if (stickyFixer && exploration.selectors.size > oldSize && exploreStickies().length)
-        stickyFixer.onChange(undefined, true);
+function onNewSelectors(selectorDescriptions) {
+    if (selectorDescriptions.length === 0) return;
+    let forceUpdate = false;
+    let forceExplore = false;
+    // The duplicates occur only when the rules duplicate in the website stylesheets. They are rare and not worth checking.
+    selectorDescriptions.forEach(description => {
+        if (description.pseudoElement) {
+            forceUpdate = true;
+            exploration.selectors.pseudoElements.push(description);
+        } else if (description.position === 'sticky') {
+            forceUpdate = true;
+            exploration.selectors.sticky.push(description);
+        } else if (description.position === 'fixed') {
+            forceExplore = true;
+            exploration.selectors.fixed.push(description);
+        }
+    });
+    if (!stickyFixer) return;  // Nothing left to do after recording the selectors
+    if (forceExplore && exploreStickies().length) forceUpdate = true;
+    if (forceUpdate) stickyFixer.onChange(undefined, true);
 }
 
 function doAll(forceExplore, settingsChanged, ev) {
@@ -310,7 +371,7 @@ function doAll(forceExplore, settingsChanged, ev) {
         // The dimensions are unknown until it's shown
         if (s.type === 'hidden') update('type', classify(s.el));
         update('status', !isInDOM && !isUnique ? 'removed' :
-            (isFixedPos(window.getComputedStyle(s.el).position) ? 'fixed' : 'unfixed'));
+            (isFixedPosition(window.getComputedStyle(s.el).position) ? 'fixed' : 'unfixed'));
     };
     if (settingsChanged) {
         exploredStickies = [];  // Clear in case whitelist rules changed
