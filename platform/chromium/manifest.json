@@ -2,8 +2,8 @@
   "manifest_version": 2,
   "name": "Sticky Ducky",
   "author": "Boris Lykah",
-  "description": "Cleans pages of the sticky elements and shows them when needed",
-  "version": "1.3",
+  "description": "Automatically cleans pages of the sticky headers and other fixed elements",
+  "version": "1.4",
   "minimum_chrome_version": "51",
   "permissions": [
     "tabs",

@@ -13,9 +13,9 @@
         <key>CFBundleInfoDictionaryVersion</key>
         <string>6.0</string>
         <key>CFBundleShortVersionString</key>
-        <string>1.2</string>
+        <string>1.4</string>
         <key>CFBundleVersion</key>
-        <string>1.2</string>
+        <string>1.4</string>
         <key>Chrome</key>
         <dict>
             <key>Database Quota</key>
@@ -67,7 +67,7 @@
             </dict>
         </dict>
         <key>Description</key>
-        <string>Cleans pages of the sticky elements and shows them when needed</string>
+        <string>Automatically cleans pages of the sticky headers and other fixed elements</string>
         <key>DeveloperIdentifier</key>
         <string>0000000000</string>
         <key>ExtensionInfoDictionaryVersion</key>
