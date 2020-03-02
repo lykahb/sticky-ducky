@@ -11,10 +11,8 @@ let exploration = {
         sticky: [{selector: '*[style*="sticky" i]', position: 'sticky'}],
         pseudoElements: []
     },
-
+    stickies: []
 };
-let lastKnownScrollY = undefined;
-let stickyFixer = null;
 let settings = {
     // This a reference for the settings structure. The values will be updated.
     isDevelopment: false,
@@ -22,12 +20,13 @@ let settings = {
     whitelist: {
         type: 'none', // ['none', 'page', 'selectors']
         selectors: [] // optional, if the type is 'selectors'
-    }
+    },
+    transDuration: 0.2,
+    typesToShow: ['sidebar', 'splash', 'hidden']  // The dimensions of a hidden element are unknown
 };
-let exploredStickies = [];
+let lastKnownScrollY = undefined;
+let stickyFixer = null;
 let scrollListener = _.debounce(_.throttle(ev => doAll(false, false, ev), 300), 50);  // Debounce delay makes it run after the page scroll listeners
-let transDuration = 0.2;
-let typesToShow = ['sidebar', 'splash', 'hidden'];  // Hidden may mean that dimensions of a hidden element are unknown
 let selectorGenerator = new CssSelectorGenerator();
 
 class StickyFixer {
@@ -71,16 +70,16 @@ class StickyFixer {
         if (exploration.selectors.pseudoElements.length && state !== 'show') {
             // Hide all fixed pseudo-elements. They cannot be classified, as you can't get their bounding rect
             let allSels = exploration.selectors.pseudoElements.map(s => s.selector);
-            rules.push(allSels.join(',') + makeStyle({transition: `opacity ${transDuration}s ease-in-out;`}));  // Show style
+            rules.push(allSels.join(',') + makeStyle({transition: `opacity ${settings.transDuration}s ease-in-out;`}));  // Show style
             let selector = exploration.selectors.pseudoElements.map(s => `${this.makeSelectorForHidden(s.selector)}::${s.pseudoElement}`).join(',');
             rules.push(`${selector} ${this.hiddenStyle}`);
         }
 
-        let stickies = exploredStickies.filter(s =>
-            s.status === 'fixed' && !typesToShow.includes(s.type) && !s.isWhitelisted);
+        let stickies = exploration.stickies.filter(s =>
+            s.status === 'fixed' && !settings.typesToShow.includes(s.type) && !s.isWhitelisted);
         if (stickies.length) {
             let allSels = stickies.map(s => s.selector);
-            rules.push(allSels.join(',') + makeStyle({transition: `opacity ${transDuration}s ease-in-out;`}));  // Show style
+            rules.push(allSels.join(',') + makeStyle({transition: `opacity ${settings.transDuration}s ease-in-out;`}));  // Show style
             let selsToHide = state === 'hide' && allSels
                 || state === 'showFooters' && stickies.filter(s => s.type !== 'footer').map(s => s.selector)
                 || [];
@@ -117,7 +116,7 @@ let fixers = {
         makeStyle({
             opacity: 0,
             visibility: 'hidden',
-            transition: `opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s`,
+            transition: `opacity ${settings.transDuration}s ease-in-out, visibility 0s ${settings.transDuration}s`,
             animation: 'none'
         })),
     'top': fixer => new StickyFixer(fixer,
@@ -126,7 +125,7 @@ let fixers = {
         makeStyle({
             opacity: 0,
             visibility: 'hidden',
-            transition: `opacity ${transDuration}s ease-in-out, visibility 0s ${transDuration}s`,
+            transition: `opacity ${settings.transDuration}s ease-in-out, visibility 0s ${settings.transDuration}s`,
             animation: 'none'
         })),
     'absolute': fixer => new StickyFixer(fixer,
@@ -231,11 +230,11 @@ let highSpecificitySelector = el => {
 
 let exploreStickies = () => {
     let selectors = exploration.selectors.fixed.map(s => s.selector);
-    let oldStickies = _.pluck(exploredStickies, 'el');
+    let oldStickies = _.pluck(exploration.stickies, 'el');
     let potentialEls = document.querySelectorAll(selectors.join(','));
     let newStickies = _.filter(potentialEls, el => !oldStickies.includes(el)).map(makeStickyObj);
-    if (newStickies.length) exploredStickies.push(...newStickies);
-    log('exploredStickies', exploredStickies);
+    if (newStickies.length) exploration.stickies.push(...newStickies);
+    log('exploration.stickies', exploration.stickies);
     return newStickies;
 };
 
@@ -343,14 +342,17 @@ function onNewSelectors(selectorDescriptions) {
 
 function doAll(forceExplore, settingsChanged, ev) {
     let forceUpdate = settingsChanged;
-    let scrollInfo;
+    let scrollInfo = {
+        scrollY: window.scrollY,
+        scrollHeight: getDocumentHeight(),
+    };
     if (ev) {
         let isPageScroller = ev.target === document || ev.target.clientHeight === window.innerHeight;
-        if (!isPageScroller) return;
-        scrollInfo = {
-            scrollY: ev.target === document ? window.scrollY : ev.target.scrollTop,
-            scrollHeight: ev.target === document ? getDocumentHeight() : ev.target.scrollHeight,
-        };
+        if (!isPageScroller) return;  // Ignore scrolling in smaller areas on the page like textarea
+        if (ev.target !== document) {
+            scrollInfo.scrollY = ev.target.scrollTop;
+            scrollInfo.scrollHeight = ev.target.scrollHeight;
+        }
         // Do nothing unless scrolled by about 5%
         if (lastKnownScrollY !== undefined && Math.abs(lastKnownScrollY - scrollInfo.scrollY) / window.innerHeight < 0.05) return;
     }
@@ -374,9 +376,9 @@ function doAll(forceExplore, settingsChanged, ev) {
             (isFixedPosition(window.getComputedStyle(s.el).position) ? 'fixed' : 'unfixed'));
     };
     if (settingsChanged) {
-        exploredStickies = [];  // Clear in case whitelist rules changed
+        exploration.stickies = [];  // Clear in case whitelist rules changed
     } else {
-        measure('reviewStickies', () => exploredStickies.forEach(reviewSticky));
+        measure('reviewStickies', () => exploration.stickies.forEach(reviewSticky));
     }
     // Explore if scrolled far enough from the last explored place. Explore once again a bit closer.
     let threshold = exploration.lastScrollY < window.innerHeight ? 0.25 : 0.5;
