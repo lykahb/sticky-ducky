@@ -7,8 +7,8 @@ let exploration = {
     externalSheets: {},  // A map where href is key and metadata is value
     sheetNodeSet: new Set(),  // Owner nodes of all top level stylesheets
     selectors: {
-        fixed: [{selector: '*[style*="fixed" i]', position: 'fixed'}],
-        sticky: [{selector: '*[style*="sticky" i]', position: 'sticky'}],
+        fixed: ['*[style*="fixed" i]'],
+        sticky: ['*[style*="sticky" i]'],
         pseudoElements: []
     },
     stickies: []
@@ -18,11 +18,11 @@ let settings = {
     isDevelopment: false,
     behavior: 'hover',
     whitelist: {
-        type: 'none', // ['none', 'page', 'selectors']
-        selectors: [] // optional, if the type is 'selectors'
+        type: 'none',  // ['none', 'page', 'selectors']
+        selectors: []  // optional, if the type is 'selectors'
     },
-    transDuration: 0.2,
-    typesToShow: ['sidebar', 'splash', 'hidden']  // The dimensions of a hidden element are unknown
+    transDuration: 0.2,  // Duration of show/hide animation
+    typesToShow: ['sidebar', 'splash', 'hidden']  // Hidden is here for caution - dimensions of a hidden element are unknown and it cannot be classified
 };
 let lastKnownScrollY = undefined;
 let stickyFixer = null;
@@ -58,13 +58,15 @@ class StickyFixer {
 
     getRules(state) {
         // Opacity is the best way to fix the headers. Removing the fixed position breaks some layouts.
-        // In case the element has animation keyframes involving opacity, set animation to none
         let rules = [];
 
-        if (exploration.selectors.sticky.length) {
-            // Set all sticky elements position to initial, ignoring their classification and the show/hide settings.
-            // It is feasible because, unlike some fixed elements, they have a proper place on the page.
-            rules.push(exploration.selectors.sticky.map(s => s.selector).join(',') + makeStyle({position: 'initial'}));
+        let stickies = exploration.stickies.filter(s =>
+            s.position === 'sticky' && !settings.typesToShow.includes(s.type) && !s.isWhitelisted);
+        if (stickies.length) {
+            // Set sticky elements position to initial. It is a better than hiding because,
+            // unlike some fixed elements, they have a proper place on the page.
+            let allSels = stickies.map(s => s.selector);
+            rules.push(allSels.join(',') + makeStyle({position: 'initial'}));
         }
 
         if (exploration.selectors.pseudoElements.length && state !== 'show') {
@@ -75,13 +77,13 @@ class StickyFixer {
             rules.push(`${selector} ${this.hiddenStyle}`);
         }
 
-        let stickies = exploration.stickies.filter(s =>
-            s.status === 'fixed' && !settings.typesToShow.includes(s.type) && !s.isWhitelisted);
-        if (stickies.length) {
-            let allSels = stickies.map(s => s.selector);
+        let fixeds = exploration.stickies.filter(s =>
+            s.position === 'fixed' && !settings.typesToShow.includes(s.type) && !s.isWhitelisted);
+        if (fixeds.length) {
+            let allSels = fixeds.map(s => s.selector);
             rules.push(allSels.join(',') + makeStyle({transition: `opacity ${settings.transDuration}s ease-in-out;`}));  // Show style
             let selsToHide = state === 'hide' && allSels
-                || state === 'showFooters' && stickies.filter(s => s.type !== 'footer').map(s => s.selector)
+                || state === 'showFooters' && fixeds.filter(s => s.type !== 'footer').map(s => s.selector)
                 || [];
             if (selsToHide.length) {
                 let selector = selsToHide.map(this.makeSelectorForHidden).join(',');
@@ -92,11 +94,12 @@ class StickyFixer {
     }
 
     updateStylesheet(rules) {
+        log(`Rules ${rules}`);
         if (!this.stylesheet) {
             let style = document.head.appendChild(document.createElement('style'));
             this.stylesheet = style.sheet;
         }
-        // TODO: compare cssText against the rule and replace only mismatching rules
+        // TODO: compare cssText against the rule and replace only the mismatching rules
         _.map(this.stylesheet.cssRules, () => this.stylesheet.deleteRule(0));
         rules.forEach(rule => this.stylesheet.insertRule(rule, this.stylesheet.cssRules.length));
     }
@@ -106,6 +109,8 @@ let fixers = {
     'hover': fixer => new StickyFixer(fixer,
         defaultState => defaultState,
         selector => selector + ':not(:hover)',
+        // In case the element has animation keyframes involving opacity, set animation to none
+        // Opacity in a keyframe overrides even an !important rule.
         makeStyle({opacity: 0, animation: 'none'})),
     'scroll': fixer => new StickyFixer(fixer,
         (defaultState, {scrollY, oldState}) =>
@@ -139,7 +144,7 @@ function makeStyle(styles) {
     return `{ ${stylesText.join('')} }`;
 }
 
-function getDocumentHeight(ev) {
+function getDocumentHeight() {
     // http://james.padolsey.com/javascript/get-document-height-cross-browser/
     let body = document.body, html = document.documentElement;
     return Math.max(
@@ -170,12 +175,14 @@ function classify(el) {
         isOnTop = rect.top / viewportHeight < 0.1,
         isOnBottom = rect.bottom / viewportHeight > 0.9,
         isOnSide = rect.left / viewportWidth < 0.1 || rect.right / viewportWidth > 0.9;
-    return isWide && isThin && isOnTop && 'header'
+    let type = isWide && isThin && isOnTop && 'header'
         || isWide && isThin && isOnBottom && 'footer'
         || isWide && isTall && 'splash'
         || isTall && isOnSide && 'sidebar'
         || width === 0 && height === 0 && 'hidden'
         || 'widget';
+    log(`Classified as ${type}`, el);
+    return type;
 }
 
 function onNewSettings(newSettings) {
@@ -229,13 +236,22 @@ let highSpecificitySelector = el => {
 };
 
 let exploreStickies = () => {
-    let selectors = exploration.selectors.fixed.map(s => s.selector);
-    let oldStickies = _.pluck(exploration.stickies, 'el');
-    let potentialEls = document.querySelectorAll(selectors.join(','));
-    let newStickies = _.filter(potentialEls, el => !oldStickies.includes(el)).map(makeStickyObj);
+    let oldStickies = new Set(_.pluck(exploration.stickies, 'el'));
+    let queryStickies = selectors => _.filter(document.querySelectorAll(selectors), el => !oldStickies.has(el))
+        .map(makeStickyObj)
+        .filter(s => s.position !== 'other');
+    let newStickies = [...queryStickies(exploration.selectors.fixed), ...queryStickies(exploration.selectors.sticky)];
     if (newStickies.length) exploration.stickies.push(...newStickies);
     log('exploration.stickies', exploration.stickies);
-    return newStickies;
+    return !!newStickies.length;
+};
+
+let getPosition = el => {
+    // This handles "FiXeD !important" or "-webkit-sticky" positions
+    const position = window.getComputedStyle(el).position.toLowerCase();
+    return position.includes('fixed') && 'fixed'
+        || position.includes('sticky') && 'sticky'
+        || 'other';
 };
 
 let makeStickyObj = el => ({
@@ -244,7 +260,7 @@ let makeStickyObj = el => ({
     selector: highSpecificitySelector(el),
     isWhitelisted: settings.whitelist.type === 'selectors'
         && settings.whitelist.selectors.some(s => el.matches(s)),
-    status: isFixedPosition(window.getComputedStyle(el).position) ? 'fixed' : 'unfixed'
+    position: getPosition(el)
 });
 
 function explore() {
@@ -328,15 +344,15 @@ function onNewSelectors(selectorDescriptions) {
             forceUpdate = true;
             exploration.selectors.pseudoElements.push(description);
         } else if (description.position === 'sticky') {
-            forceUpdate = true;
-            exploration.selectors.sticky.push(description);
+            forceExplore = true;
+            exploration.selectors.sticky.push(description.selector);
         } else if (description.position === 'fixed') {
             forceExplore = true;
-            exploration.selectors.fixed.push(description);
+            exploration.selectors.fixed.push(description.selector);
         }
     });
     if (!stickyFixer) return;  // Nothing left to do after recording the selectors
-    if (forceExplore && exploreStickies().length) forceUpdate = true;
+    if (forceExplore && exploreStickies()) forceUpdate = true;
     if (forceUpdate) stickyFixer.onChange(undefined, true);
 }
 
@@ -368,24 +384,23 @@ function doAll(forceExplore, settingsChanged, ev) {
                 s[key] = value;
             }
         };
+        if (!isInDOM && isUnique) s.el = els[0]; // Does not affect stylesheet, so don't force update
+        if (!isInDOM && !isUnique || getPosition(s.el) === 'other') return false;  // remove sticky
         if (isInDOM && !isUnique) update('selector', highSpecificitySelector(s.el));
-        if (!isInDOM && isUnique) s.el = els[0]; // Does not affect stylesheet, so no update
-        // The dimensions are unknown until it's shown
+        // The dimensions are unknown until it is shown. Perhaps try to run classify less often
         if (s.type === 'hidden') update('type', classify(s.el));
-        update('status', !isInDOM && !isUnique ? 'removed' :
-            (isFixedPosition(window.getComputedStyle(s.el).position) ? 'fixed' : 'unfixed'));
+        return s;
     };
     if (settingsChanged) {
         exploration.stickies = [];  // Clear in case whitelist rules changed
     } else {
-        measure('reviewStickies', () => exploration.stickies.forEach(reviewSticky));
+        measure('reviewStickies', () => { exploration.stickies = exploration.stickies.filter(reviewSticky) });
     }
     // Explore if scrolled far enough from the last explored place. Explore once again a bit closer.
     let threshold = exploration.lastScrollY < window.innerHeight ? 0.25 : 0.5;
     let isFar = scrollInfo && Math.abs(exploration.lastScrollY - scrollInfo.scrollY) / window.innerHeight > threshold;
     if (isFar || exploration.limit > 0 || forceExplore) {
-        let newStickies = explore();
-        forceUpdate = forceUpdate || newStickies.length > 0;
+        forceUpdate = forceUpdate || explore();
         exploration.limit--;
         if (isFar) {
             exploration.limit = 1;

@@ -1,8 +1,5 @@
 'use strict';
 
-// This liberal comparison picks up "FiXeD !important" or "-webkit-sticky" positions
-let isFixedPosition = p => p.toLowerCase().indexOf('fixed') >= 0 || p.toLowerCase().indexOf('sticky') >= 0;
-
 let isDataURL = url => /^\s*data:/i.test(url);
 
 // These functions recursively call each other. It is important both to handle the failures and process
