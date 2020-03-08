@@ -41,6 +41,7 @@ Notably, the wildcards are currently not supported.
 
 All URL patterns can be combined with the individual selectors:
 For example, with the entry `||bugtracker.corp.com###header` Sticky Ducky would ignore the header on every page of the bugtracker.corp.com but treat the other stickies as usual.
+Selectors must be simple: `.class` or `#id` is okay but `div.class` is not. The selectors are passed inside of `:not` that has tight constraints.
 
 ## Installation
 

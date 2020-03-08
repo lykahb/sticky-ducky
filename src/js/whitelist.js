@@ -32,6 +32,7 @@ function parseRules(whitelist) {
                 rule = parseURLMatcher(line.slice(0, selectorIndex));
                 rule.selector = line.slice(selectorIndex + 2);
                 assert(rule.selector, 'Selector must not be empty');
+                assert(canSelectorBeUsed(rule.selector), `Invalid selector ${rule.selector}\nSelectors must be simple`);
             } else {
                 rule = parseURLMatcher(line);
             }
@@ -88,4 +89,13 @@ function matchWhitelist(whitelist, location) {
         result.selectors = selectors;
     }
     return result;
+}
+
+function canSelectorBeUsed(selector) {
+    try {
+        document.querySelectorAll(`*:not(${selector})`);
+        return true;
+    } catch (e) {
+        return false;
+    }
 }
