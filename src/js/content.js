@@ -10,12 +10,11 @@ let exploration = {
         fixed: ['*[style*="fixed" i]'],
         sticky: ['*[style*="sticky" i]'],
         pseudoElements: []
-    },
-    stickies: []
+    }
 };
 let settings = {
     // This a reference for the settings structure. The values will be updated.
-    isDevelopment: false,
+    isDevelopment: true,
     behavior: 'hover',
     whitelist: {
         type: 'none',  // ['none', 'page', 'selectors']
@@ -58,15 +57,19 @@ class StickyFixer {
 
     getRules(state) {
         // Opacity is the best way to fix the headers. Removing the fixed position breaks some layouts.
+        // Select and hide them by the dataset attributes
         let rules = [];
+        let typesToShow = state === 'showFooters' ? settings.typesToShow.concat('footer') : settings.typesToShow;
 
-        let stickies = exploration.stickies.filter(s =>
-            s.position === 'sticky' && !settings.typesToShow.includes(s.type) && !s.isWhitelisted);
-        if (stickies.length) {
-            // Set sticky elements position to initial. It is a better than hiding because,
-            // unlike some fixed elements, they have a proper place on the page.
-            let allSels = stickies.map(s => s.selector);
-            rules.push(allSels.join(',') + makeStyle({position: 'initial'}));
+        if (state !== 'show') {
+            let stickySelector = `*[sticky-ducky-position="sticky"]` +
+                typesToShow.map(type => `:not([sticky-ducky-type="${type}"])`).join('');
+            let stickyFixStyle = makeStyle({position: 'initial'});
+            if (settings.whitelist.type === 'selectors') {
+                let is = ':-moz-any';  // [':-moz-any', ':-webkit-any'];
+                stickySelector += `:not(${is}(${settings.whitelist.selectors.join(',')}))`;
+            }
+            rules.push(stickySelector + stickyFixStyle);
         }
 
         if (exploration.selectors.pseudoElements.length && state !== 'show') {
@@ -77,24 +80,24 @@ class StickyFixer {
             rules.push(`${selector} ${this.hiddenStyle}`);
         }
 
-        let fixeds = exploration.stickies.filter(s =>
-            s.position === 'fixed' && !settings.typesToShow.includes(s.type) && !s.isWhitelisted);
-        if (fixeds.length) {
-            let allSels = fixeds.map(s => s.selector);
-            rules.push(allSels.join(',') + makeStyle({transition: `opacity ${settings.transDuration}s ease-in-out;`}));  // Show style
-            let selsToHide = state === 'hide' && allSels
-                || state === 'showFooters' && fixeds.filter(s => s.type !== 'footer').map(s => s.selector)
-                || [];
-            if (selsToHide.length) {
-                let selector = selsToHide.map(this.makeSelectorForHidden).join(',');
-                rules.push(`${selector} ${this.hiddenStyle}`);
+        let fixedSelector = `*[sticky-ducky-position="fixed"]` +
+            typesToShow.map(type => `:not([sticky-ducky-type="${type}"])`).join('');
+        let showSelector = fixedSelector + makeStyle({transition: `opacity ${settings.transDuration}s ease-in-out;`});
+        rules.push(showSelector);
+        if (state !== 'show') {
+            let hideSelector = this.makeSelectorForHidden(fixedSelector);
+            if (settings.whitelist.type === 'selectors') {
+                let is = ':-moz-any';  // [':-moz-any', ':-webkit-any'];
+                hideSelector += `:not(${is}(${settings.whitelist.selectors.join(',')}))`;
             }
+            rules.push(hideSelector + this.hiddenStyle);
         }
+
         return rules;
     }
 
     updateStylesheet(rules) {
-        log(`Rules ${rules}`);
+        log('Rules', rules);
         if (!this.stylesheet) {
             let style = document.head.appendChild(document.createElement('style'));
             this.stylesheet = style.sheet;
@@ -213,37 +216,14 @@ function activateSettings() {
     }
 }
 
-let highSpecificitySelector = el => {
-    // There is always the unique selector since we use nth-child.
-    let {selectors, element} = selectorGenerator.getSelectorObjects(el);
-    let boostId = () => selectors.find(s => s.id && (s.id = s.id + s.id));
-    let ascendantId = () => {
-        let directParent = element.parentElement;
-        for (let el = directParent; el; el = el.parentElement) {
-            let sel = selectorGenerator.getIdSelector(el);
-            if (sel) return sel + (el === directParent ? ' > ' : ' ');
-        }
-        return '';
-    };
-    let boostClassesOrAttributes = () => {
-        let selector = selectors.find(s => s.class || s.attribute);
-        let list = selector && (selector.class || selector.attribute);
-        if (list) list.push(...list);
-    };
-    // Increase specificity of the selector
-    boostId() || boostClassesOrAttributes();
-    return ascendantId() + selectors.map(sel => selectorGenerator.stringifySelectorObject(sel)).join(' > ');
-};
-
 let exploreStickies = () => {
-    let oldStickies = new Set(_.pluck(exploration.stickies, 'el'));
-    let queryStickies = selectors => _.filter(document.querySelectorAll(selectors), el => !oldStickies.has(el))
-        .map(makeStickyObj)
-        .filter(s => s.position !== 'other');
-    let newStickies = [...queryStickies(exploration.selectors.fixed), ...queryStickies(exploration.selectors.sticky)];
-    if (newStickies.length) exploration.stickies.push(...newStickies);
-    log('exploration.stickies', exploration.stickies);
-    return !!newStickies.length;
+    let selectors = exploration.selectors.fixed.concat(exploration.selectors.sticky);
+    let els = document.querySelectorAll(selectors.join(','));
+    els.forEach(el => {
+        el.setAttribute('sticky-ducky-type', classify(el));
+        el.setAttribute('sticky-ducky-position', getPosition(el));
+    });
+    log('explored stickies', els);
 };
 
 let getPosition = el => {
@@ -253,15 +233,6 @@ let getPosition = el => {
         || position.includes('sticky') && 'sticky'
         || 'other';
 };
-
-let makeStickyObj = el => ({
-    el: el,
-    type: classify(el),
-    selector: highSpecificitySelector(el),
-    isWhitelisted: settings.whitelist.type === 'selectors'
-        && settings.whitelist.selectors.some(s => el.matches(s)),
-    position: getPosition(el)
-});
 
 function explore() {
     let exploreStylesheets = () => {
@@ -372,35 +343,11 @@ function doAll(forceExplore, settingsChanged, ev) {
         // Do nothing unless scrolled by about 5%
         if (lastKnownScrollY !== undefined && Math.abs(lastKnownScrollY - scrollInfo.scrollY) / window.innerHeight < 0.05) return;
     }
-    let reviewSticky = s => {
-        // An element may be moved elsewhere, removed and returned to DOM later. It tries to recover them by selector.
-        let els = s.selector && document.querySelectorAll(s.selector);
-        let isUnique = els && els.length === 1;
-        let isInDOM = document.contains(s.el);
-        let update = (key, value) => {
-            if (s[key] !== value) {
-                forceUpdate = true;
-                log(`Updated ${key} to ${value}`, s);
-                s[key] = value;
-            }
-        };
-        if (!isInDOM && isUnique) s.el = els[0]; // Does not affect stylesheet, so don't force update
-        if (!isInDOM && !isUnique || getPosition(s.el) === 'other') return false;  // remove sticky
-        if (isInDOM && !isUnique) update('selector', highSpecificitySelector(s.el));
-        // The dimensions are unknown until it is shown. Perhaps try to run classify less often
-        if (s.type === 'hidden') update('type', classify(s.el));
-        return s;
-    };
-    if (settingsChanged) {
-        exploration.stickies = [];  // Clear in case whitelist rules changed
-    } else {
-        measure('reviewStickies', () => { exploration.stickies = exploration.stickies.filter(reviewSticky) });
-    }
     // Explore if scrolled far enough from the last explored place. Explore once again a bit closer.
     let threshold = exploration.lastScrollY < window.innerHeight ? 0.25 : 0.5;
     let isFar = scrollInfo && Math.abs(exploration.lastScrollY - scrollInfo.scrollY) / window.innerHeight > threshold;
     if (isFar || exploration.limit > 0 || forceExplore) {
-        forceUpdate = forceUpdate || explore();
+        explore();
         exploration.limit--;
         if (isFar) {
             exploration.limit = 1;
