@@ -37,7 +37,6 @@
       ],
       "js": [
         "lib/underscore-1.9.1.js",
-        "lib/css-selector-generator-1.0.4.js",
         "lib/css-what-3.2.1.js",
         "js/vapiInjected.js",
         "js/explorer.js",

@@ -10,8 +10,7 @@ let exploration = {
         fixed: ['*[style*="fixed" i]'],
         sticky: ['*[style*="sticky" i]'],
         pseudoElements: []
-    },
-    stickies: []
+    }
 };
 let settings = {
     // This a reference for the settings structure. The values will be updated.
@@ -27,7 +26,6 @@ let settings = {
 let lastKnownScrollY = undefined;
 let stickyFixer = null;
 let scrollListener = _.debounce(_.throttle(ev => doAll(false, false, ev), 300), 50);  // Debounce delay makes it run after the page scroll listeners
-let selectorGenerator = new CssSelectorGenerator();
 
 class StickyFixer {
     constructor(fixer, getNewState, makeSelectorForHidden, hiddenStyle) {
@@ -58,16 +56,19 @@ class StickyFixer {
 
     getRules(state) {
         // Opacity is the best way to fix the headers. Removing the fixed position breaks some layouts.
+        // Select and hide them by the sticky-ducky-* attributes.
+        // For better precision it's better to have `:moz-any(${exploration.selectors.sticky.join('')})`
+        // instead of '*[sticky-ducky-position="sticky"]' but :moz-any and :is don't support compound selectors.
+        // The :not(#sticky-ducky-specificity-id) increases the specificity of the selectors.
         let rules = [];
+        let typesToShow = state === 'showFooters' ? settings.typesToShow.concat('footer') : settings.typesToShow;
+        let whitelistSelector = settings.whitelist.type === 'selectors' ? settings.whitelist.selectors.map(s => `:not(${s})`).join('') : '';
 
-        let stickies = exploration.stickies.filter(s =>
-            s.position === 'sticky' && !settings.typesToShow.includes(s.type) && !s.isWhitelisted);
-        if (stickies.length) {
-            // Set sticky elements position to initial. It is a better than hiding because,
-            // unlike some fixed elements, they have a proper place on the page.
-            let allSels = stickies.map(s => s.selector);
-            rules.push(allSels.join(',') + makeStyle({position: 'initial'}));
-        }
+        // Apply the fix ignoring state. Otherwise, the layout will jump on scroll when shown after scrolling up.
+        let stickySelector = `*[sticky-ducky-position="sticky"][sticky-ducky-type]:not(#sticky-ducky-specificity-id)` +
+            typesToShow.map(type => `:not([sticky-ducky-type="${type}"])`).join('');
+        let stickyFixStyle = makeStyle({position: 'initial'});
+        rules.push(stickySelector + whitelistSelector + stickyFixStyle);
 
         if (exploration.selectors.pseudoElements.length && state !== 'show') {
             // Hide all fixed pseudo-elements. They cannot be classified, as you can't get their bounding rect
@@ -77,24 +78,20 @@ class StickyFixer {
             rules.push(`${selector} ${this.hiddenStyle}`);
         }
 
-        let fixeds = exploration.stickies.filter(s =>
-            s.position === 'fixed' && !settings.typesToShow.includes(s.type) && !s.isWhitelisted);
-        if (fixeds.length) {
-            let allSels = fixeds.map(s => s.selector);
-            rules.push(allSels.join(',') + makeStyle({transition: `opacity ${settings.transDuration}s ease-in-out;`}));  // Show style
-            let selsToHide = state === 'hide' && allSels
-                || state === 'showFooters' && fixeds.filter(s => s.type !== 'footer').map(s => s.selector)
-                || [];
-            if (selsToHide.length) {
-                let selector = selsToHide.map(this.makeSelectorForHidden).join(',');
-                rules.push(`${selector} ${this.hiddenStyle}`);
-            }
+        let fixedSelector = `*[sticky-ducky-position="fixed"][sticky-ducky-type]:not(#sticky-ducky-specificity-id)` +
+            typesToShow.map(type => `:not([sticky-ducky-type="${type}"])`).join('');
+        let showSelector = fixedSelector + makeStyle({transition: `opacity ${settings.transDuration}s ease-in-out;`});
+        rules.push(showSelector);
+        if (state !== 'show') {
+            let hideSelector = this.makeSelectorForHidden(fixedSelector);
+            rules.push(hideSelector + whitelistSelector + this.hiddenStyle);
         }
+
         return rules;
     }
 
     updateStylesheet(rules) {
-        log(`Rules ${rules}`);
+        log('Rules', rules);
         if (!this.stylesheet) {
             let style = document.head.appendChild(document.createElement('style'));
             this.stylesheet = style.sheet;
@@ -213,37 +210,20 @@ function activateSettings() {
     }
 }
 
-let highSpecificitySelector = el => {
-    // There is always the unique selector since we use nth-child.
-    let {selectors, element} = selectorGenerator.getSelectorObjects(el);
-    let boostId = () => selectors.find(s => s.id && (s.id = s.id + s.id));
-    let ascendantId = () => {
-        let directParent = element.parentElement;
-        for (let el = directParent; el; el = el.parentElement) {
-            let sel = selectorGenerator.getIdSelector(el);
-            if (sel) return sel + (el === directParent ? ' > ' : ' ');
-        }
-        return '';
-    };
-    let boostClassesOrAttributes = () => {
-        let selector = selectors.find(s => s.class || s.attribute);
-        let list = selector && (selector.class || selector.attribute);
-        if (list) list.push(...list);
-    };
-    // Increase specificity of the selector
-    boostId() || boostClassesOrAttributes();
-    return ascendantId() + selectors.map(sel => selectorGenerator.stringifySelectorObject(sel)).join(' > ');
-};
-
 let exploreStickies = () => {
-    let oldStickies = new Set(_.pluck(exploration.stickies, 'el'));
-    let queryStickies = selectors => _.filter(document.querySelectorAll(selectors), el => !oldStickies.has(el))
-        .map(makeStickyObj)
-        .filter(s => s.position !== 'other');
-    let newStickies = [...queryStickies(exploration.selectors.fixed), ...queryStickies(exploration.selectors.sticky)];
-    if (newStickies.length) exploration.stickies.push(...newStickies);
-    log('exploration.stickies', exploration.stickies);
-    return !!newStickies.length;
+    let selectors = exploration.selectors.fixed.concat(exploration.selectors.sticky);
+    let els = document.querySelectorAll(selectors.join(','));
+    els.forEach(el => {
+        // Attributes are less likely to interfere with the page than dataset data-*.
+        let type = el.getAttribute('sticky-ducky-type')
+        if (!type || type === 'hidden') {
+            el.setAttribute('sticky-ducky-type', classify(el));
+        }
+        if (!el.getAttribute('sticky-ducky-position')) {
+            el.setAttribute('sticky-ducky-position', getPosition(el));
+        }
+    });
+    log('explored stickies', els);
 };
 
 let getPosition = el => {
@@ -254,55 +234,42 @@ let getPosition = el => {
         || 'other';
 };
 
-let makeStickyObj = el => ({
-    el: el,
-    type: classify(el),
-    selector: highSpecificitySelector(el),
-    isWhitelisted: settings.whitelist.type === 'selectors'
-        && settings.whitelist.selectors.some(s => el.matches(s)),
-    position: getPosition(el)
-});
+function exploreStylesheets() {
+    let anyRemoved = false;
+    let explorer = new Explorer(result => onSheetExplored(result));
+    // We detect dynamic updates for the internal stylesheets by comparing rules size.
+    // All internal (declared with <style>) stylesheets have cssRules available.
+    // Updates to external and imported stylesheets are not checked.
+    exploration.internalSheets.forEach(sheetInfo => {
+        let ownerNode = sheetInfo.ownerNode;
+        if (!document.contains(ownerNode)) {  // The stylesheet has been removed.
+            sheetInfo.removed = anyRemoved = true;
+            exploration.sheetNodeSet.delete(ownerNode);
+            return;
+        }
+        if (sheetInfo.rulesCount !== ownerNode.sheet.cssRules.length) {
+            explorer.exploreStylesheet(ownerNode.sheet);
+            sheetInfo.rulesCount = ownerNode.sheet.cssRules.length;
+        }
+    });
+    if (anyRemoved) exploration.internalSheets = exploration.internalSheets.filter(sheetInfo => !sheetInfo.removed);
 
-function explore() {
-    let exploreStylesheets = () => {
-        let anyRemoved = false;
-        let explorer = new Explorer(result => onSheetExplored(result));
-        // We detect dynamic updates for the internal stylesheets by comparing rules size.
-        // All internal (declared with <style>) stylesheets have cssRules available.
-        // Updates to external and imported stylesheets are not checked.
-        exploration.internalSheets.forEach(sheetInfo => {
-            let ownerNode = sheetInfo.ownerNode;
-            if (!document.contains(ownerNode)) {  // The stylesheet has been removed.
-                sheetInfo.removed = anyRemoved = true;
-                exploration.sheetNodeSet.delete(ownerNode);
-                return;
-            }
-            if (sheetInfo.rulesCount !== ownerNode.sheet.cssRules.length) {
-                explorer.exploreStylesheet(ownerNode.sheet);
-                sheetInfo.rulesCount = ownerNode.sheet.cssRules.length;
-            }
-        });
-        if (anyRemoved) exploration.internalSheets = exploration.internalSheets.filter(sheetInfo => !sheetInfo.removed);
+    // TODO: If the page uses Web Components the styles won't be in the document
 
-        // TODO: If the page uses Web Components the styles won't be in the document
-
-        _.forEach(document.styleSheets, sheet => {
-            if (sheet === stickyFixer.stylesheet ||
-                !sheet.ownerNode ||
-                exploration.sheetNodeSet.has(sheet.ownerNode)) return;
-            exploration.sheetNodeSet.add(sheet.ownerNode);
-            if (sheet.href) {
-                let sheetInfo = {status: 'unexplored'};
-                exploration.externalSheets[sheet.href] = sheetInfo;
-            } else {
-                let sheetInfo = {ownerNode: sheet.ownerNode, rulesCount: sheet.cssRules.length};
-                exploration.internalSheets.push(sheetInfo);
-            }
-            explorer.exploreStylesheet(sheet);
-        });
-    };
-    measure('exploreStylesheets', exploreStylesheets);
-    return measure('exploreStickies', exploreStickies);
+    _.forEach(document.styleSheets, sheet => {
+        if (sheet === stickyFixer.stylesheet ||
+            !sheet.ownerNode ||
+            exploration.sheetNodeSet.has(sheet.ownerNode)) return;
+        exploration.sheetNodeSet.add(sheet.ownerNode);
+        if (sheet.href) {
+            let sheetInfo = {status: 'unexplored'};
+            exploration.externalSheets[sheet.href] = sheetInfo;
+        } else {
+            let sheetInfo = {ownerNode: sheet.ownerNode, rulesCount: sheet.cssRules.length};
+            exploration.internalSheets.push(sheetInfo);
+        }
+        explorer.exploreStylesheet(sheet);
+    });
 }
 
 function onSheetExplored(result) {
@@ -352,7 +319,7 @@ function onNewSelectors(selectorDescriptions) {
         }
     });
     if (!stickyFixer) return;  // Nothing left to do after recording the selectors
-    if (forceExplore && exploreStickies()) forceUpdate = true;
+    if (forceExplore) exploreStickies();
     if (forceUpdate) stickyFixer.onChange(undefined, true);
 }
 
@@ -372,35 +339,12 @@ function doAll(forceExplore, settingsChanged, ev) {
         // Do nothing unless scrolled by about 5%
         if (lastKnownScrollY !== undefined && Math.abs(lastKnownScrollY - scrollInfo.scrollY) / window.innerHeight < 0.05) return;
     }
-    let reviewSticky = s => {
-        // An element may be moved elsewhere, removed and returned to DOM later. It tries to recover them by selector.
-        let els = s.selector && document.querySelectorAll(s.selector);
-        let isUnique = els && els.length === 1;
-        let isInDOM = document.contains(s.el);
-        let update = (key, value) => {
-            if (s[key] !== value) {
-                forceUpdate = true;
-                log(`Updated ${key} to ${value}`, s);
-                s[key] = value;
-            }
-        };
-        if (!isInDOM && isUnique) s.el = els[0]; // Does not affect stylesheet, so don't force update
-        if (!isInDOM && !isUnique || getPosition(s.el) === 'other') return false;  // remove sticky
-        if (isInDOM && !isUnique) update('selector', highSpecificitySelector(s.el));
-        // The dimensions are unknown until it is shown. Perhaps try to run classify less often
-        if (s.type === 'hidden') update('type', classify(s.el));
-        return s;
-    };
-    if (settingsChanged) {
-        exploration.stickies = [];  // Clear in case whitelist rules changed
-    } else {
-        measure('reviewStickies', () => { exploration.stickies = exploration.stickies.filter(reviewSticky) });
-    }
     // Explore if scrolled far enough from the last explored place. Explore once again a bit closer.
     let threshold = exploration.lastScrollY < window.innerHeight ? 0.25 : 0.5;
     let isFar = scrollInfo && Math.abs(exploration.lastScrollY - scrollInfo.scrollY) / window.innerHeight > threshold;
     if (isFar || exploration.limit > 0 || forceExplore) {
-        forceUpdate = forceUpdate || explore();
+        measure('exploreStylesheets', exploreStylesheets);
+        measure('exploreStickies', exploreStickies);
         exploration.limit--;
         if (isFar) {
             exploration.limit = 1;

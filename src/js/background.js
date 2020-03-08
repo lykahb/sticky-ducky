@@ -8,7 +8,7 @@ vAPI.getSettings(['whitelist', 'behavior', 'isDevelopment'], settingsResponse =>
         try {
             settings.whitelist = parseRules(settings.whitelist);
         } catch (e) {
-            console.log(e);
+            console.error(e);
         }
     }
     if (!settings.behavior) {
