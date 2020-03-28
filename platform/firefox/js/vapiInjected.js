@@ -14,11 +14,9 @@
     chrome.storage.onChanged.addListener(changes => {
         // Retrieve settings again
         let getSettings = () => {
-            console.log('sending getSettings');
             vAPI.sendToBackground('getSettings', {location: _.omit(window.location, _.isFunction)});
             isRegistered = false;
         };
-        console.log(`document.hidden ${document.hidden}`);
         if (!document.hidden) {
             getSettings();
         } else if (!isRegistered) {
