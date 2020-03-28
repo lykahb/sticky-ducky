@@ -219,7 +219,9 @@ let exploreStickies = () => {
         if (!type || type === 'hidden') {
             el.setAttribute('sticky-ducky-type', classify(el));
         }
-        if (!el.getAttribute('sticky-ducky-position')) {
+        let position = el.getAttribute('sticky-ducky-position');
+        if (!position || position === 'other') {
+            // Think of a header that only gets fixed once you scroll. That's why "other" has to be checked regularly.
             el.setAttribute('sticky-ducky-position', getPosition(el));
         }
     });
