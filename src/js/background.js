@@ -12,7 +12,9 @@ vAPI.getSettings(['whitelist', 'behavior', 'isDevelopment'], settingsResponse =>
         }
     }
     if (!settings.behavior) {
-        settings.behavior = DetectIt.deviceType === 'mouseOnly' ? 'hover' : 'scroll';
+        // Assume that devices without touch have a mouse
+        const hasTouch = 'ontouchstart' in window;
+        settings.behavior = hasTouch ? 'scroll' : 'hover';
         vAPI.updateSettings({behavior: settings.behavior});
     }
 

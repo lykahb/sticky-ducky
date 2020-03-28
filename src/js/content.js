@@ -15,7 +15,7 @@ let exploration = {
 let settings = {
     // This a reference for the settings structure. The values will be updated.
     isDevelopment: false,
-    behavior: 'hover',
+    behavior: 'scroll',
     whitelist: {
         type: 'none',  // ['none', 'page', 'selectors']
         selectors: []  // optional, if the type is 'selectors'
