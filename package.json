@@ -1,8 +1,11 @@
 {
     "name": "sticky-ducky",
     "dependencies": {
-        "browserify": "^16.5.0",
-        "css-what": "3.2.1",
+        "css-what": "^3.2.1",
         "underscore": "1.9.1"
+    },
+    "devDependencies": {
+        "browserify": "^16.5.2",
+        "prettier": "^2.1.2"
     }
 }
