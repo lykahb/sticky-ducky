@@ -67,7 +67,11 @@ class StickyFixer {
         // Apply the fix ignoring state. Otherwise, the layout will jump on scroll when shown after scrolling up.
         let stickySelector = `*[sticky-ducky-position="sticky"][sticky-ducky-type]:not(#sticky-ducky-specificity-id)` +
             typesToShow.map(type => `:not([sticky-ducky-type="${type}"])`).join('');
-        let stickyFixStyle = makeStyle({position: 'initial'});
+
+        // Initial position doesn't work - see tests/stickyPosition.html
+        // Relative position shifts when the element has a style for top, like github does.
+        // Hiding them makes little sense if they aren't out of viewport
+        let stickyFixStyle = makeStyle({position: 'relative', top: "0"});
         rules.push(stickySelector + whitelistSelector + stickyFixStyle);
 
         if (exploration.selectors.pseudoElements.length && state !== 'show') {
