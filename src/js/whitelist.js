@@ -47,8 +47,7 @@ function parseRules(whitelist) {
 function isWhitelistRuleMatch(rule, location) {
     let noHash = location.href;
     let containsDomain = rule => {
-        let index = location.hostname.endsWith(rule.domain);
-        if (index < 0) return false;
+        if (!location.hostname.endsWith(rule.domain)) return false;
         if (location.hostname.length === rule.domain.length) {
             return true;
         } else if (location.hostname[location.hostname.length - rule.domain.length - 1] === '.') {
