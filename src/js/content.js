@@ -65,8 +65,15 @@ class StickyFixer {
         let whitelistSelector = settings.whitelist.type === 'selectors' ? settings.whitelist.selectors.map(s => `:not(${s})`).join('') : '';
 
         // Apply the fix ignoring state. Otherwise, the layout will jump on scroll when shown after scrolling up.
-        let stickySelector = `*[sticky-ducky-position="sticky"][sticky-ducky-type]:not(#sticky-ducky-specificity-id)` +
-            typesToShow.map(type => `:not([sticky-ducky-type="${type}"])`).join('');
+        let stickySelector = [
+            '*[sticky-ducky-position="sticky"]',
+            '[sticky-ducky-type]',
+            ':not(#sticky-ducky-specificity-id)',
+            // Ignore cases that have top set to a non-zero value. For example, file headers in github PRs.
+            // If it is set to !important, the element would look shifted.
+            ':not([style*="top:"]:not([style*="top:0"], [style*="top: 0"]))',
+            ''
+        ].concat(typesToShow.map(type => `:not([sticky-ducky-type="${type}"])`)).join('');
 
         // Initial position doesn't work - see tests/stickyPosition.html
         // Relative position shifts when the element has a style for top, like github does.
