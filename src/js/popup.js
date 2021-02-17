@@ -5,6 +5,24 @@ function resetViews() {
     document.getElementById('mainTab').style.display = '';
     document.getElementById('settingsTab').style.display = 'none';
     document.getElementById('errorMessage').style.display = 'none';
+    document.getElementById('statusMessage').style.display = 'none';
+}
+
+function getCurrentTabs() {
+    let querying = browser.tabs.query({currentWindow: true, active: true});
+    querying.then(tabs => tabs[0].url, e => document.write('error=' + e));
+}
+
+function showStatus(message, isError) {
+    if (isError) {
+        document.getElementById('statusMessage').style.display = 'none';
+        document.getElementById('errorMessage').style.display = '';
+        document.getElementById('errorMessage').innerText = message;
+    } else {
+        document.getElementById('errorMessage').style.display = 'none';
+        document.getElementById('statusMessage').style.display = '';
+        document.getElementById('statusMessage').innerText = message;
+    }
 }
 
 function setListeners() {
@@ -22,6 +40,10 @@ function setListeners() {
             document.getElementById('settingsTab').style.display = '';
         });
     });
+    document.getElementById('whitelistButton').addEventListener('click', async e => {
+        let tabs = await browser.tabs.query({currentWindow: true, active: true});
+        let result = vAPI.sendToBackground('addToWhitelist', {url: tabs[0].url});
+    });
     document.getElementById('save').addEventListener('click', e => {
         // Check and save here. Notify the background.
         // If the handler sends the message to background for update, the content script could update the settings too.
@@ -31,6 +53,10 @@ function setListeners() {
     document.getElementById('cancel').addEventListener('click', e => {
         resetViews();
     });
+    document.querySelectorAll('button').forEach(el => el.addEventListener('click', e => {
+        document.getElementById('errorMessage').style.display = 'none';
+        document.getElementById('statusMessage').style.display = 'none';
+    }));
 }
 
 function init() {
@@ -56,9 +82,9 @@ function init() {
 vAPI.onPopupOpen(init);
 
 // These listeners could be replaced with promises on updateSettings
-vAPI.listen('invalidSettings', (message, sendResponse) => {
-    document.getElementById('errorMessage').style.display = '';
-    document.getElementById('errorMessage').innerText = message;
-});
+vAPI.listen('invalidSettings', (message, sendResponse) => showStatus(message, true));
 
 vAPI.listen('acceptedSettings', init);
+
+vAPI.listen('addToWhitelistError', (message, sendResponse) => showStatus(message.error, true));
+vAPI.listen('addToWhitelistSuccess', (message, sendResponse) => showStatus('Added to whitelist'));

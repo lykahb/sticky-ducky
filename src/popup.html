@@ -91,18 +91,20 @@
         <button data-behavior="top">On top of the page</button>
         <button data-behavior="always">Always (disable extension)</button>
     </div>
+    <button id="whitelistButton">Whitelist website</button>
     <button id="settingsButton">Settings</button>
 </div>
 <div id="settingsTab" style="display: none">
     <div style="font-weight: bold;">Whitelist</div>
     <div>Ignore the stickies on the sites and individual pages in this list. One entry per line. See more <a target="_blank" href="https://github.com/lykahb/sticky-ducky#settings">format details</a>.</div>
     <textarea id="whitelist" autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="0" wrap="off"></textarea>
-    <div id="errorMessage" style="display: none;">Error with definitions</div>
     <div>
         <button id="cancel">Cancel</button>
         <button id="save">Save</button>
     </div>
 </div>
+<div id="errorMessage" style="display: none;">text</div>
+<div id="statusMessage" style="display: none;">text</div>
 
 <script type="application/javascript" src="lib/underscore-1.9.1.js"></script>
 <script type="application/javascript" src="js/vapiBackground.js"></script>
