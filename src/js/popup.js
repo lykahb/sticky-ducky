@@ -1,16 +1,12 @@
 'use strict';
 let initialized = false;
+let behavior = null;
 
 function resetViews() {
     document.getElementById('mainTab').style.display = '';
     document.getElementById('settingsTab').style.display = 'none';
     document.getElementById('errorMessage').style.display = 'none';
     document.getElementById('statusMessage').style.display = 'none';
-}
-
-function getCurrentTabs() {
-    let querying = browser.tabs.query({currentWindow: true, active: true});
-    querying.then(tabs => tabs[0].url, e => document.write('error=' + e));
 }
 
 function showStatus(message, isError) {
@@ -28,9 +24,9 @@ function showStatus(message, isError) {
 function setListeners() {
     // The UI logic and listeners need refactoring.
     document.querySelectorAll('#options > button').forEach(el => el.addEventListener('click', e => {
-        let newBehavior = e.target.dataset.behavior;
+        behavior = e.target.dataset.behavior;
         if (!e.target.classList.contains('active')) {
-            vAPI.sendToBackground('updateSettings', {behavior: newBehavior});
+            vAPI.sendToBackground('updateSettings', {behavior: behavior});
         }
     }));
     document.getElementById('settingsButton').addEventListener('click', e => {
@@ -40,9 +36,10 @@ function setListeners() {
             document.getElementById('settingsTab').style.display = '';
         });
     });
-    document.getElementById('whitelistButton').addEventListener('click', async e => {
-        let tabs = await browser.tabs.query({currentWindow: true, active: true});
-        let result = vAPI.sendToBackground('addToWhitelist', {url: tabs[0].url});
+    document.getElementById('whitelistButton').addEventListener('click', () => {
+        vAPI.getCurrentTabs().then(tabs =>
+            vAPI.sendToBackground('addToWhitelist', {url: tabs[0].url}));
+
     });
     document.getElementById('save').addEventListener('click', e => {
         // Check and save here. Notify the background.
@@ -61,7 +58,7 @@ function setListeners() {
 
 function init() {
     vAPI.getSettings('behavior', settings => {
-        let behavior = settings.behavior;
+        behavior = settings.behavior;
         if (!initialized) {
             setListeners();
             initialized = true;
@@ -77,6 +74,18 @@ function init() {
         resetViews();
     });
 }
+
+// Temporarily display stickies when clicked on the extension button.
+// It should be outside of init, because init is called when the settings changed.
+vAPI.getCurrentTabs().then(tabs => {
+    vAPI.sendToTabs(tabs, 'settings', {behavior: 'always'});
+
+    window.addEventListener('unload', ev => {
+            vAPI.sendToTabs(tabs, 'settings', {behavior: behavior})
+        },
+        {once: true}
+    );
+});
 
 // On FF and Chrome the popup window is closed. On Safari the window persists. This function must be idempotent.
 vAPI.onPopupOpen(init);

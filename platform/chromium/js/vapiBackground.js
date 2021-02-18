@@ -10,6 +10,18 @@
     vAPI.sendSettings = () => null;  // Client gets the message from the Storage onChange
     vAPI.listen = (name, listener) => getListeners(name).push(listener);
     vAPI.sendToBackground = (name, message) => chrome.runtime.sendMessage({name: name, message: message});
+    vAPI.sendToTabs = (tabs, name, message) => {
+        tabs.forEach(tab => {
+            try {
+                chrome.tabs.sendMessage(tab.id, {name: name, message: message});
+            } catch (e) {
+                console.error(e);
+            }
+        });
+    };
+    vAPI.getCurrentTabs = () => new Promise ((resolve) => {
+        chrome.tabs.query({currentWindow: true, active: true}, resolve)
+    });
 
     chrome.runtime.onMessage.addListener((request, sender) => {
         // The Chromium sendResponse calls the sendMessage callback instead of sending a message

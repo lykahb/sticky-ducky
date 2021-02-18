@@ -1,4 +1,4 @@
-(function(self) {
+(function (self) {
     'use strict';
     let vAPI = self.vAPI = self.vAPI || {};
     let listeners = {};
@@ -10,6 +10,16 @@
     vAPI.sendSettings = () => null;  // Client gets the message from the Storage onChange
     vAPI.listen = (name, listener) => getListeners(name).push(listener);
     vAPI.sendToBackground = (name, message) => browser.runtime.sendMessage({name: name, message: message});
+    vAPI.sendToTabs = (tabs, name, message) => {
+        tabs.forEach(tab => {
+            try {
+                browser.tabs.sendMessage(tab.id, {name: name, message: message});
+            } catch (e) {
+                console.error(e);
+            }
+        });
+    };
+    vAPI.getCurrentTabs = () => browser.tabs.query({currentWindow: true, active: true});
 
     browser.runtime.onMessage.addListener((request, sender) => {
         let sendResponse = (name, message) => {

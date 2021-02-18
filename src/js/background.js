@@ -4,6 +4,8 @@ let settings = {};
 // An optimization to cache the parsed rules.
 vAPI.getSettings(['whitelist', 'behavior', 'isDevelopment'], settingsResponse => {
     settings = settingsResponse;
+
+    settings.parsedWhitelist = [];
     if (settings.whitelist) {
         try {
             settings.parsedWhitelist = parseRules(settings.whitelist);
@@ -29,7 +31,7 @@ vAPI.getSettings(['whitelist', 'behavior', 'isDevelopment'], settingsResponse =>
 
 vAPI.listen('updateSettings', (message, sendResponse) => {
     // Apply settings to the settings object
-    if (message.whitelist) {
+    if (message.whitelist !== undefined) {
         try {
             settings.parsedWhitelist = parseRules(message.whitelist);
             settings.whitelist = message.whitelist;
@@ -68,13 +70,18 @@ vAPI.listen('addToWhitelist', (message, sendResponse) => {
         sendResponse('addToWhitelistError', {error: 'Invalid URL'});
         return;
     }
-    let existingRule = settings.parsedWhitelist.find(rule => rule.domain == url.hostname);
+    let existingRule = settings.parsedWhitelist.find(rule => rule.domain === url.hostname);
     if (existingRule) {
         sendResponse('addToWhitelistError', {error: 'The URL already exists in the whitelist'});
         return;
     }
+
     // This really should be encapsulated in the whitelist module.
-    settings.whitelist = settings.whitelist + '\n||' + url.hostname;
+    if (!settings.whitelist) {
+        settings.whitelist = '||' + url.hostname;
+    } else {
+        settings.whitelist = settings.whitelist + '\n||' + url.hostname;
+    }
     settings.parsedWhitelist = parseRules(settings.whitelist);
     vAPI.updateSettings({whitelist: settings.whitelist});
     sendResponse('addToWhitelistSuccess');
