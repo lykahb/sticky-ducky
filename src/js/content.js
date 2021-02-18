@@ -30,7 +30,7 @@ let scrollListener = _.debounce(_.throttle(ev => doAll(false, false, ev), 300), 
 class StickyFixer {
     constructor(fixer, getNewState, makeSelectorForHidden, hiddenStyle) {
         this.stylesheet = fixer ? fixer.stylesheet : null;
-        this.state = fixer ? fixer.state : 'show'; // hide, show, showFooters
+        this.state = fixer && fixer.state; // hide, show, showFooters
         this.getNewState = getNewState;
         this.makeSelectorForHidden = makeSelectorForHidden;
         this.hiddenStyle = hiddenStyle;
@@ -121,10 +121,12 @@ let fixers = {
         // Opacity in a keyframe overrides even an !important rule.
         makeStyle({opacity: 0, animation: 'none'})),
     'scroll': fixer => new StickyFixer(fixer,
-        (defaultState, {scrollY, oldState}) =>
-            scrollY === lastKnownScrollY && oldState
-            || scrollY < lastKnownScrollY && 'show'
-            || defaultState,
+        (defaultState, {scrollY, oldState}) => {
+            log('scroll decision', defaultState, scrollY, lastKnownScrollY, oldState);
+            return scrollY === lastKnownScrollY && oldState
+                || scrollY < lastKnownScrollY && 'show'
+                || defaultState
+        },
         selector => selector,
         makeStyle({
             opacity: 0,
