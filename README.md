@@ -1,5 +1,5 @@
 # Sticky Ducky
-
+test commit
 *A browser extension that cleans pages of the sticky elements and shows them when needed. Fast and simple* 
 
 Many websites have sticky headers, social buttons and other things which are always on the screen. Sometimes they are useful,
