@@ -1,7 +1,7 @@
 {
     "name": "sticky-ducky",
     "dependencies": {
-        "css-what": "^3.2.1",
+        "css-what": "^5.0.1",
         "underscore": "1.9.1"
     },
     "devDependencies": {
