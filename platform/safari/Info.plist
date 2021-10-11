@@ -57,8 +57,8 @@
             <dict>
                 <key>Start</key>
                 <array>
-                    <string>lib/underscore-1.9.1.js</string>
-                    <string>lib/css-what-3.2.1.js</string>
+                    <string>lib/underscore-1.13.1.js</string>
+                    <string>lib/css-what-5.0.1.js</string>
                     <string>vapiInjected.js</string>
                     <string>explorer.js</string>
                     <string>content.js</string>

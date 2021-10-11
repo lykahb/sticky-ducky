@@ -20,8 +20,8 @@
   },
   "background": {
     "scripts": [
-      "lib/underscore-1.9.1.js",
-      "lib/css-what-3.2.1.js",
+      "lib/underscore-1.13.1.js",
+      "lib/css-what-5.0.1.js",
       "js/vapiBackground.js",
       "js/explorer.js",
       "js/whitelist.js",
@@ -35,8 +35,8 @@
         "https://*/*"
       ],
       "js": [
-        "lib/underscore-1.9.1.js",
-        "lib/css-what-3.2.1.js",
+        "lib/underscore-1.13.1.js",
+        "lib/css-what-5.0.1.js",
         "js/vapiInjected.js",
         "js/explorer.js",
         "js/content.js"

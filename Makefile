@@ -26,5 +26,5 @@ clean:
 
 browserify:
 	npm ci
-	node_modules/browserify/bin/cmd.js --require css-what --standalone CSSWhat > lib/css-what-3.2.1.js
-	node_modules/prettier/bin-prettier.js --write lib/css-what-3.2.1.js
+	node_modules/browserify/bin/cmd.js --require css-what --standalone CSSWhat > lib/css-what-5.0.1.js
+	node_modules/prettier/bin-prettier.js --write lib/css-what-5.0.1.js
