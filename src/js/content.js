@@ -21,7 +21,7 @@ let settings = {
         selectors: []  // optional, if the type is 'selectors'
     },
     transDuration: 0.2,  // Duration of show/hide animation
-    typesToShow: ['sidebar', 'splash', 'hidden']  // Hidden is here for caution - dimensions of a hidden element are unknown and it cannot be classified
+    typesToShow: ['sidebar', 'splash', 'hidden']  // Hidden is here for caution - dimensions of a hidden element are unknown, and it cannot be classified
 };
 let lastKnownScrollY = undefined;
 let stickyFixer = null;
@@ -69,22 +69,22 @@ class StickyFixer {
             '*[sticky-ducky-position="sticky"]',
             '[sticky-ducky-type]',
             ':not(#sticky-ducky-specificity-id)',
-            // Ignore cases that have top set to a non-zero value. For example, file headers in github PRs.
+            // Ignore cases that have top set to a non-zero value. For example, file headers in GitHub PRs.
             // If it is set to !important, the element would look shifted.
             ':not([style*="top:"]:not([style*="top:0"], [style*="top: 0"]))',
             ''
         ].concat(typesToShow.map(type => `:not([sticky-ducky-type="${type}"])`)).join('');
 
         // Initial position doesn't work - see tests/stickyPosition.html
-        // Relative position shifts when the element has a style for top, like github does.
+        // Relative position shifts when the element has a style for top, like GitHub does.
         // Hiding them makes little sense if they aren't out of viewport
         let stickyFixStyle = makeStyle({position: 'relative', top: "0"});
         rules.push(stickySelector + whitelistSelector + stickyFixStyle);
 
         if (exploration.selectors.pseudoElements.length && state !== 'show') {
             // Hide all fixed pseudo-elements. They cannot be classified, as you can't get their bounding rect
-            let allSels = exploration.selectors.pseudoElements.map(s => s.selector);
-            rules.push(allSels.join(',') + makeStyle({transition: `opacity ${settings.transDuration}s ease-in-out;`}));  // Show style
+            let allSelectors = exploration.selectors.pseudoElements.map(s => s.selector);
+            rules.push(allSelectors.join(',') + makeStyle({transition: `opacity ${settings.transDuration}s ease-in-out;`}));  // Show style
             let selector = exploration.selectors.pseudoElements.map(s => `${this.makeSelectorForHidden(s.selector)}::${s.pseudoElement}`).join(',');
             rules.push(`${selector} ${this.hiddenStyle}`);
         }
@@ -277,8 +277,7 @@ function exploreStylesheets() {
             exploration.sheetNodeSet.has(sheet.ownerNode)) return;
         exploration.sheetNodeSet.add(sheet.ownerNode);
         if (sheet.href) {
-            let sheetInfo = {status: 'unexplored'};
-            exploration.externalSheets[sheet.href] = sheetInfo;
+            exploration.externalSheets[sheet.href] = {status: 'unexplored'};
         } else {
             let sheetInfo = {ownerNode: sheet.ownerNode, rulesCount: sheet.cssRules.length};
             exploration.internalSheets.push(sheetInfo);
