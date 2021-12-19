@@ -28,12 +28,12 @@ let stickyFixer = null;
 let scrollListener = _.debounce(_.throttle(ev => doAll(false, false, ev), 300), 50);  // Debounce delay makes it run after the page scroll listeners
 
 class StickyFixer {
-    constructor(fixer, getNewState, makeSelectorForHidden, hiddenStyle) {
-        this.stylesheet = fixer ? fixer.stylesheet : null;
-        this.state = fixer && fixer.state; // hide, show, showFooters
+    constructor(stylesheet, state, getNewState, makeSelectorForHidden, hiddenStyle) {
+        this.stylesheet = stylesheet;
+        this.state = state; // hide, show, showFooters
         this.getNewState = getNewState;
         this.makeSelectorForHidden = makeSelectorForHidden;
-        this.hiddenStyle = hiddenStyle;
+        this.hiddenStyleRule = makeStyle(hiddenStyle);
     }
 
     onChange(scrollInfo, forceUpdate) {
@@ -86,7 +86,7 @@ class StickyFixer {
             let allSelectors = exploration.selectors.pseudoElements.map(s => s.selector);
             rules.push(allSelectors.join(',') + makeStyle({transition: `opacity ${settings.transDuration}s ease-in-out;`}));  // Show style
             let selector = exploration.selectors.pseudoElements.map(s => `${this.makeSelectorForHidden(s.selector)}::${s.pseudoElement}`).join(',');
-            rules.push(`${selector} ${this.hiddenStyle}`);
+            rules.push(`${selector} ${this.hiddenStyleRule}`);
         }
 
         let fixedSelector = `*[sticky-ducky-position="fixed"][sticky-ducky-type]:not(#sticky-ducky-specificity-id)` +
@@ -95,7 +95,7 @@ class StickyFixer {
         rules.push(showSelector);
         if (state !== 'show') {
             let hideSelector = this.makeSelectorForHidden(fixedSelector);
-            rules.push(hideSelector + whitelistSelector + this.hiddenStyle);
+            rules.push(hideSelector + whitelistSelector + this.hiddenStyleRule);
         }
 
         return rules;
@@ -114,39 +114,43 @@ class StickyFixer {
 }
 
 let fixers = {
-    'hover': fixer => new StickyFixer(fixer,
-        defaultState => defaultState,
-        selector => selector + ':not(:hover)',
+    'hover': {
+        getNewState: defaultState => defaultState,
+        makeSelectorForHidden: selector => selector + ':not(:hover)',
         // In case the element has animation keyframes involving opacity, set animation to none
         // Opacity in a keyframe overrides even an !important rule.
-        makeStyle({opacity: 0, animation: 'none'})),
-    'scroll': fixer => new StickyFixer(fixer,
-        (defaultState, {scrollY, oldState}) => {
+        hiddenStyle: {opacity: 0, animation: 'none'}
+    },
+    'scroll': {
+        getNewState: (defaultState, {scrollY, oldState}) => {
             log('scroll decision', defaultState, scrollY, lastKnownScrollY, oldState);
             return scrollY === lastKnownScrollY && oldState
                 || scrollY < lastKnownScrollY && 'show'
                 || defaultState
         },
-        selector => selector,
-        makeStyle({
+        makeSelectorForHidden: selector => selector,
+        hiddenStyle: {
             opacity: 0,
             visibility: 'hidden',
             transition: `opacity ${settings.transDuration}s ease-in-out, visibility 0s ${settings.transDuration}s`,
             animation: 'none'
-        })),
-    'top': fixer => new StickyFixer(fixer,
-        defaultState => defaultState,
-        selector => selector,
-        makeStyle({
+        }
+    },
+    'top': {
+        getNewState: defaultState => defaultState,
+        makeSelectorForHidden: selector => selector,
+        hiddenStyle: {
             opacity: 0,
             visibility: 'hidden',
             transition: `opacity ${settings.transDuration}s ease-in-out, visibility 0s ${settings.transDuration}s`,
             animation: 'none'
-        })),
-    'absolute': fixer => new StickyFixer(fixer,
-        defaultState => defaultState,
-        selector => selector,
-        makeStyle({position: 'absolute'})),
+        }
+    },
+    'absolute': {
+        getNewState: defaultState => defaultState,
+        makeSelectorForHidden: selector => selector,
+        hiddenStyle: {position: 'absolute'}
+    }
 };
 
 function makeStyle(styles) {
@@ -207,14 +211,15 @@ function onNewSettings(newSettings) {
 
 function activateSettings() {
     log(`Activating behavior ${settings.behavior}`);
-    let isActive = !!stickyFixer;  // Presence of stickyFixer indicates that the scroll listener is set
-    let shouldBeActive = settings.behavior !== 'always' && settings.whitelist.type !== 'page';
+    const isActive = !!stickyFixer;  // Presence of stickyFixer indicates that the scroll listener is set
+    const shouldBeActive = settings.behavior !== 'always' && settings.whitelist.type !== 'page';
     if (shouldBeActive) {
         // Detecting passive events on Firefox and setting the listener immediately is buggy. Manifest supports only browsers that have it.
         if (!isActive) {
             document.addEventListener('scroll', scrollListener, {passive: true, capture: true});
         }
-        stickyFixer = fixers[settings.behavior](stickyFixer);
+        const newFixer = fixers[settings.behavior];
+        stickyFixer = new StickyFixer(stickyFixer && stickyFixer.stylesheet, stickyFixer && stickyFixer.state, newFixer.getNewState, newFixer.makeSelectorForHidden, newFixer.hiddenStyle);
         doAll(true, true);
     } else if (isActive && !shouldBeActive) {
         document.removeEventListener('scroll', scrollListener);
