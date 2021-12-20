@@ -20,7 +20,7 @@ let settings = {
         type: 'none',  // ['none', 'page', 'selectors']
         selectors: []  // optional, if the type is 'selectors'
     },
-    transDuration: 0.2,  // Duration of show/hide animation
+    transitionDuration: 0.2,  // Duration of show/hide animation
     typesToShow: ['sidebar', 'splash', 'hidden']  // Hidden is here for caution - dimensions of a hidden element are unknown, and it cannot be classified
 };
 let lastKnownScrollY = undefined;
@@ -33,7 +33,8 @@ class StickyFixer {
         this.state = state; // hide, show, showFooters
         this.getNewState = getNewState;
         this.makeSelectorForHidden = makeSelectorForHidden;
-        this.hiddenStyleRule = makeStyle(hiddenStyle);
+        this.hiddenStyle = hiddenStyle;
+        this.ruleCache = {};
     }
 
     onChange(scrollInfo, forceUpdate) {
@@ -59,57 +60,65 @@ class StickyFixer {
         // Select and hide them by the sticky-ducky-* attributes.
         // For better precision it's better to have `:moz-any(${exploration.selectors.sticky.join('')})`
         // instead of '*[sticky-ducky-position="sticky"]' but :moz-any and :is don't support compound selectors.
-        // The :not(#sticky-ducky-specificity-id) increases the specificity of the selectors.
-        let rules = [];
-        let typesToShow = state === 'showFooters' ? settings.typesToShow.concat('footer') : settings.typesToShow;
-        let whitelistSelector = settings.whitelist.type === 'selectors' ? settings.whitelist.selectors.map(s => `:not(${s})`).join('') : '';
+        // The :not(#sticky-ducky-boost-specificity) increases the specificity of the selectors.
+        const rules = [];
+        const typesToShow = state === 'showFooters' ? settings.typesToShow.concat('footer') : settings.typesToShow;
+        const notWhitelistedSelector = settings.whitelist.type === 'selectors' ? settings.whitelist.selectors.map(s => `:not(${s})`).join('') : '';
+
+        const ignoreTypesToShowSelector = typesToShow.map(type => `:not([sticky-ducky-type="${type}"])`).join('');
+        const hiddenSelector = `[sticky-ducky-type]:not(#sticky-ducky-boost-specificity):not(:focus-within)${notWhitelistedSelector}`;
 
         // Apply the fix ignoring state. Otherwise, the layout will jump on scroll when shown after scrolling up.
-        let stickySelector = [
-            '*[sticky-ducky-position="sticky"]',
-            '[sticky-ducky-type]',
-            ':not(#sticky-ducky-specificity-id)',
-            // Ignore cases that have top set to a non-zero value. For example, file headers in GitHub PRs.
-            // If it is set to !important, the element would look shifted.
-            ':not([style*="top:"]:not([style*="top:0"], [style*="top: 0"]))',
-            ''
-        ].concat(typesToShow.map(type => `:not([sticky-ducky-type="${type}"])`)).join('');
+        // Ignore cases that have top set to a non-zero value. For example, file headers in GitHub PRs.
+        // If it is set to !important, the element would look shifted.
+        const stickySelector = `*[sticky-ducky-position="sticky"]:not([style*="top:"]:not([style*="top:0"], [style*="top: 0"]))${hiddenSelector}`;
 
-        // Initial position doesn't work - see tests/stickyPosition.html
+        // The static position doesn't work - see tests/stickyPosition.html
         // Relative position shifts when the element has a style for top, like GitHub does.
-        // Hiding them makes little sense if they aren't out of viewport
-        let stickyFixStyle = makeStyle({position: 'relative', top: "0"});
-        rules.push(stickySelector + whitelistSelector + stickyFixStyle);
+        // Hiding them makes little sense if they aren't out of viewport.
+        const stickyFixStyle = this.getCachedStyle('stickyFixStyle', {position: 'relative', top: "0"});
+        rules.push(`${stickySelector} ${stickyFixStyle}`);
 
-        if (exploration.selectors.pseudoElements.length && state !== 'show') {
+        const hideElsStyle = this.getCachedStyle('hideElsStyle', this.hiddenStyle);
+        const showStyle = this.getCachedStyle('showStyle', {transition: `opacity ${settings.transitionDuration}s ease-in-out;`});
+        if (exploration.selectors.pseudoElements.length) {
+            const allSelectors = exploration.selectors.pseudoElements.map(s => `${s.selector}::${s.pseudoElement}`).join(',');
+            rules.push(`${allSelectors} ${showStyle}`);
             // Hide all fixed pseudo-elements. They cannot be classified, as you can't get their bounding rect
-            let allSelectors = exploration.selectors.pseudoElements.map(s => s.selector);
-            rules.push(allSelectors.join(',') + makeStyle({transition: `opacity ${settings.transDuration}s ease-in-out;`}));  // Show style
-            let selector = exploration.selectors.pseudoElements.map(s => `${this.makeSelectorForHidden(s.selector)}::${s.pseudoElement}`).join(',');
-            rules.push(`${selector} ${this.hiddenStyleRule}`);
+            // So a pseudo-element that looks like a footer would still be hidden when page is scrolled to the bottom.
+            if (state !== 'show') {
+                const hidePseudoElsSelector = exploration.selectors.pseudoElements.map(s => `${this.makeSelectorForHidden(s.selector)}::${s.pseudoElement}`).join(',');
+                rules.push(`${hidePseudoElsSelector} ${hideElsStyle}`);
+            }
         }
 
-        let fixedSelector = `*[sticky-ducky-position="fixed"][sticky-ducky-type]:not(#sticky-ducky-specificity-id)` +
-            typesToShow.map(type => `:not([sticky-ducky-type="${type}"])`).join('');
-        let showSelector = fixedSelector + makeStyle({transition: `opacity ${settings.transDuration}s ease-in-out;`});
-        rules.push(showSelector);
+        const fixedSelector = `*[sticky-ducky-position="fixed"]${hiddenSelector}`;
+        // To keep the opacity transitions animated, the show rule is included for all states.
+        rules.push(`${fixedSelector} ${showStyle}`);
         if (state !== 'show') {
-            let hideSelector = this.makeSelectorForHidden(fixedSelector);
-            rules.push(hideSelector + whitelistSelector + this.hiddenStyleRule);
+            const hideFixedElsSelector = this.makeSelectorForHidden(fixedSelector);
+            rules.push(`${hideFixedElsSelector}${ignoreTypesToShowSelector} ${hideElsStyle}`);
         }
 
         return rules;
     }
 
     updateStylesheet(rules) {
-        log('Rules', rules);
-        if (!this.stylesheet) {
+        log('Updating stylesheet rules', rules);
+        if (!this.stylesheet || !document.contains(this.stylesheet.ownerNode)) {
             let style = document.head.appendChild(document.createElement('style'));
             this.stylesheet = style.sheet;
         }
         // TODO: compare cssText against the rule and replace only the mismatching rules
         _.map(this.stylesheet.cssRules, () => this.stylesheet.deleteRule(0));
         rules.forEach(rule => this.stylesheet.insertRule(rule, this.stylesheet.cssRules.length));
+    }
+
+    getCachedStyle(name, style) {
+        if (!this.ruleCache[name]) {
+            this.ruleCache[name] = makeStyle(style);
+        }
+        return this.ruleCache[name];
     }
 }
 
@@ -131,9 +140,12 @@ let fixers = {
         makeSelectorForHidden: selector => selector,
         hiddenStyle: {
             opacity: 0,
+            // Display: none cannot be used in a transition.
+            // So visibility hides a sticky, and pointer-events makes it non-interactive.
             visibility: 'hidden',
-            transition: `opacity ${settings.transDuration}s ease-in-out, visibility 0s ${settings.transDuration}s`,
-            animation: 'none'
+            transition: `opacity ${settings.transitionDuration}s ease-in-out, visibility 0s ${settings.transitionDuration}s`,
+            animation: 'none',
+            'pointer-events': 'none'
         }
     },
     'top': {
@@ -142,8 +154,9 @@ let fixers = {
         hiddenStyle: {
             opacity: 0,
             visibility: 'hidden',
-            transition: `opacity ${settings.transDuration}s ease-in-out, visibility 0s ${settings.transDuration}s`,
-            animation: 'none'
+            transition: `opacity ${settings.transitionDuration}s ease-in-out, visibility 0s ${settings.transitionDuration}s`,
+            animation: 'none',
+            'pointer-events': 'none'
         }
     },
     'absolute': {
@@ -154,30 +167,39 @@ let fixers = {
 };
 
 function makeStyle(styles) {
-    let stylesText = Object.keys(styles).map(name => `${name}: ${styles[name]} !important;`);
+    const stylesText = Object.keys(styles).map(name => `${name}: ${styles[name]} !important;`);
     return `{ ${stylesText.join('')} }`;
 }
 
 function getDocumentHeight() {
     // http://james.padolsey.com/javascript/get-document-height-cross-browser/
-    let body = document.body, html = document.documentElement;
+    const body = document.body, html = document.documentElement;
     return Math.max(
         body.scrollHeight, body.offsetHeight, body.clientHeight,
         html.scrollHeight, html.offsetHeight, html.clientHeight);
 }
 
-let log = (...args) => settings.isDevelopment && console.log('Sticky Ducky: ', ...args);
-let measure = (label, f) => {
+function log(...args) {
+    if (settings.isDevelopment) {
+        console.log('Sticky Ducky: ', ...args);
+    }
+}
+
+function measure(label, f) {
     if (!settings.isDevelopment) return f();
-    let before = window.performance.now();
-    let result = f();
-    let after = window.performance.now();
+    const before = window.performance.now();
+    const result = f();
+    const after = window.performance.now();
     log(`Call to ${label} took ${after - before}ms`);
     return result;
-};
+}
 
 function classify(el) {
-    let viewportWidth = window.innerWidth,
+    // Optimize for hidden elements
+    if (window.getComputedStyle(el).display === 'none') {
+        return 'hidden';
+    }
+    const viewportWidth = window.innerWidth,
         viewportHeight = window.innerHeight,
         rect = el.getBoundingClientRect(),
         clip = (val, low, high, max) => Math.max(0, val + Math.min(low, 0) + Math.min(max - high, 0)),
@@ -189,7 +211,7 @@ function classify(el) {
         isOnTop = rect.top / viewportHeight < 0.1,
         isOnBottom = rect.bottom / viewportHeight > 0.9,
         isOnSide = rect.left / viewportWidth < 0.1 || rect.right / viewportWidth > 0.9;
-    let type = isWide && isThin && isOnTop && 'header'
+    const type = isWide && isThin && isOnTop && 'header'
         || isWide && isThin && isOnBottom && 'footer'
         || isWide && isTall && 'splash'
         || isTall && isOnSide && 'sidebar'
@@ -237,6 +259,7 @@ let exploreStickies = () => {
         if (!type || type === 'hidden') {
             el.setAttribute('sticky-ducky-type', classify(el));
         }
+
         let position = el.getAttribute('sticky-ducky-position');
         if (!position || position === 'other') {
             // Think of a header that only gets fixed once you scroll. That's why "other" has to be checked regularly.

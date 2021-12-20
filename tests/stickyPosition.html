@@ -8,6 +8,7 @@
             height: 3em;
             top: 0;
         }
+        /* When a header is set from sticky to static, the absolute content breaks */
         .stickyContent {
             position: absolute;
             width: 100%;
@@ -34,6 +35,13 @@
             <div class="stickyContent">header 2</div>
         </div>
         <p>Second card</p>
+    </div>
+    <div class="card">
+<!-- This is similar to the github file headers. They are aligned below a fixed header. -->
+        <div class="header" style="top: 60px !important;">
+            <div class="stickyContent">header 3</div>
+        </div>
+        <p>Third card</p>
     </div>
 </body>
 </html>
