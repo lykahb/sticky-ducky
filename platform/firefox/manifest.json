@@ -3,7 +3,7 @@
   "name": "Sticky Ducky",
   "author": "Boris Lykah",
   "description": "Automatically cleans pages of the sticky headers and other fixed elements",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "applications": {
     "gecko": {
       "id": "sticky-ducky@addons.mozilla.org",
