@@ -47,7 +47,7 @@ Selectors must be simple: `.class` or `#id` is okay but `div.class` is not. The 
 
 [Chrome Store](https://chrome.google.com/webstore/detail/sticky-ducky/gklhneccajklhledmencldobkjjpnhkd)
 
-[Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/sticky-ducky/)
+[Firefox Add-ons](https://addons.mozilla.org/firefox/addon/sticky-ducky/)
 
 ## Support development
 
