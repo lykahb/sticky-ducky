@@ -1,6 +1,6 @@
 # Sticky Ducky
 
-*A browser extension that cleans pages of the sticky elements and shows them when needed. Fast and simple* 
+*A browser extension that cleans pages of the sticky elements and shows them when needed. Fast and simple.* 
 
 Many websites have sticky headers, social buttons and other things which are always on the screen. Sometimes they are useful,
 but most of the time it's junk that simply occupies the screen space. Sticky Ducky automatically cleans the page of the sticky
@@ -50,7 +50,7 @@ Selectors must be simple: `.class` or `#id` is okay but `div.class` is not. The 
 [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/sticky-ducky/)
 
 ## FAQ
-### How does Sticky Ducky work?:
+### How does Sticky Ducky work?
 1. It analyzes style sheets to discover rules that make elements fixed or sticky.
 2. Then it uses selectors from them to find the sticky elements in the page DOM.
 3. For each element that may be sticky, apply heuristics to classify its type (header, footer, etc.) and decide if it should be hidden and under what conditions.
