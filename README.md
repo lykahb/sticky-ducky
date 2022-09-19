@@ -49,10 +49,17 @@ Selectors must be simple: `.class` or `#id` is okay but `div.class` is not. The 
 
 [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/sticky-ducky/)
 
-## Support development
+## FAQ
+### How does Sticky Ducky work?:
+1. It analyzes style sheets to discover rules that make elements fixed or sticky.
+2. Then it uses selectors from them to find the sticky elements in the page DOM.
+3. For each element that may be sticky, apply heuristics to classify its type (header, footer, etc.) and decide if it should be hidden and under what conditions.
 
-If you'd like to support this project, please send examples of websites with unusual stickies, pull requests, issues, or donate to
+### There are still some sticky elements on a page
+Likely, Sticky Ducky has detected that element but its heuristics decided not to hide it. You can use developer tools to see if it found it - the detected elements would have an extra attribute `sticky-ducky-type`.
 
-[Patreon](https://www.patreon.com/lykahb)
-
-Bitcoin 1NGxD7QgSYgWmuFSi7yKbWMGH4f9cA1dTK
+### Why not hide all sticky elements?
+Cleaning up sticky elements too eagerly can break websites. Even worse, it would not be obvious that the extension has caused it and the site needs to be whitelisted. So the heuristics make cautious choices.
+Here are a few examples:
+- On Twitter (and many other sites) opening a picture full-screen brings up a gallery view and disables scroll on the page. The gallery itself is sticky. So hiding it would create an impression that the page froze and does not respond.
+- On Github on PR files view the bars with file names are sticky. Ideally, we want to show them when they are on the screen and hide when they are scrolled away. However, the browser API makes it difficult to distinguish those cases. So there is only a choice between hiding them in any position or doing nothing.
