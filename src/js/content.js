@@ -3,6 +3,37 @@ console.log('[DEBUG] Content script starting...');
 console.log('[DEBUG] _ available:', typeof _ !== 'undefined');
 console.log('[DEBUG] CSSWhat available:', typeof CSSWhat !== 'undefined');
 
+// Helper function to send messages to background with retry logic
+async function sendMessageToBackground(message, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            console.log('[DEBUG] Sending message to background (attempt', i + 1, '):', message.name);
+            const response = await chrome.runtime.sendMessage(message);
+            console.log('[DEBUG] Background response received:', response);
+            return response;
+        } catch (error) {
+            console.warn('[WARNING] Message send failed (attempt', i + 1, '):', error.message);
+            
+            if (error.message.includes('Could not establish connection') || 
+                error.message.includes('Receiving end does not exist')) {
+                
+                if (i < retries - 1) {
+                    // Wait a bit before retrying to let service worker wake up
+                    console.log('[DEBUG] Waiting 200ms before retry...');
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    continue;
+                } else {
+                    console.error('[ERROR] Service worker not responding after', retries, 'attempts');
+                    throw new Error('Service worker not responding');
+                }
+            } else {
+                // For other errors, don't retry
+                throw error;
+            }
+        }
+    }
+}
+
 let exploration = {
     limit: 2,  // Limit for exploration on shorter scroll distance
     lastScrollY: 0,  // Keeps track of the scroll position during the last exploration
@@ -334,7 +365,7 @@ function onSheetExplored(result) {
                     status: 'awaitingBackgroundFetch',
                     error: result.error
                 };
-                chrome.runtime.sendMessage({
+                sendMessageToBackground({
                     name: 'exploreSheet',
                     message: {href: result.href, baseURI: result.baseURI}
                 }).then(response => {
@@ -344,6 +375,11 @@ function onSheetExplored(result) {
                     }
                 }).catch(error => {
                     console.error('[ERROR] Failed to explore sheet:', error);
+                    // Mark as failed so we don't keep retrying
+                    exploration.externalSheets[result.href] = {
+                        status: 'fail',
+                        error: error.message
+                    };
                 });
             } else {
                 exploration.externalSheets[result.href] = {
@@ -435,7 +471,7 @@ if (window.top === window) {  // Don't do anything within an iframe
     try {
         const locationData = _.omit(window.location, _.isFunction);
         console.log('[DEBUG] Location data:', locationData);
-        chrome.runtime.sendMessage({
+        sendMessageToBackground({
             name: 'getSettings',
             message: {location: locationData}
         }).then(response => {
@@ -445,7 +481,8 @@ if (window.top === window) {  // Don't do anything within an iframe
                 onNewSettings(response.message);
             }
         }).catch(error => {
-            console.error('[ERROR] Failed to get settings:', error);
+            console.error('[ERROR] Failed to get initial settings:', error);
+            // Don't break the page - just log the error and continue
         });
     } catch (error) {
         console.error('[ERROR] Failed to send getSettings message:', error);
@@ -455,7 +492,7 @@ if (window.top === window) {  // Don't do anything within an iframe
     chrome.storage.onChanged.addListener((changes) => {
         console.log('[DEBUG] Storage changed:', changes);
         // Retrieve settings again when storage changes
-        chrome.runtime.sendMessage({
+        sendMessageToBackground({
             name: 'getSettings',
             message: {location: _.omit(window.location, _.isFunction)}
         }).then(response => {
@@ -465,6 +502,7 @@ if (window.top === window) {  // Don't do anything within an iframe
             }
         }).catch(error => {
             console.error('[ERROR] Failed to get settings after storage change:', error);
+            // Continue silently - storage change failures shouldn't break functionality
         });
     });
 

@@ -58,6 +58,23 @@ function initializeSettings() {
     });
 }
 
+// Helper function to safely send responses (handles closed popup)
+function safeSendResponse(sendResponse, response, context = 'unknown') {
+    try {
+        console.log('[DEBUG] Sending response for', context, ':', response);
+        sendResponse(response);
+        return true;
+    } catch (error) {
+        if (error.message.includes('Could not establish connection') || 
+            error.message.includes('Receiving end does not exist')) {
+            console.log('[DEBUG] Receiving end closed (popup/content script disconnected), ignoring response for', context);
+        } else {
+            console.error('[ERROR] Failed to send response for', context, ':', error);
+        }
+        return false;
+    }
+}
+
 // Message handling
 console.log('[DEBUG] Setting up message listener...');
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -68,9 +85,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     try {
         const response = handleMessageSync(request, sender);
         if (response) {
-            console.log('[DEBUG] Sending immediate response via sendResponse:', response);
-            // Use sendResponse for immediate responses in V3
-            sendResponse(response);
+            console.log('[DEBUG] Sending immediate response via safeSendResponse:', response);
+            // Use safeSendResponse for immediate responses in V3
+            safeSendResponse(sendResponse, response, request.name);
             return false; // Don't keep the channel open
         } else {
             // For async operations, handle differently
@@ -79,7 +96,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
     } catch (error) {
         console.error('[ERROR] Message handling failed:', error);
-        sendResponse({name: 'error', message: error.message});
+        safeSendResponse(sendResponse, {name: 'error', message: error.message}, 'error-handler');
         return false;
     }
 });
@@ -100,16 +117,16 @@ function handleMessageSync(request, sender) {
 }
 
 function handleMessageAsync(request, sender, sendResponse) {
-    // Handle asynchronous messages using sendResponse
+    // Handle asynchronous messages using safeSendResponse
     switch(request.name) {
         case 'exploreSheet':
             // Explorer functionality should be handled by content script in V3
             console.warn('[WARNING] exploreSheet should be handled by content script, not background');
-            sendResponse({name: 'sheetExplored', message: {status: 'fail', error: 'exploreSheet not supported in service worker'}});
+            safeSendResponse(sendResponse, {name: 'sheetExplored', message: {status: 'fail', error: 'exploreSheet not supported in service worker'}}, 'exploreSheet');
             break;
         default:
             console.warn('[WARNING] Unknown async message:', request.name);
-            sendResponse({name: 'error', message: 'Unknown message type'});
+            safeSendResponse(sendResponse, {name: 'error', message: 'Unknown message type'}, 'unknown-async');
     }
 }
 

@@ -3,6 +3,36 @@ console.log('[DEBUG] Popup script starting...');
 let initialized = false;
 let behavior = null;
 
+// Helper function to send messages to background with retry logic
+async function sendMessageToBackground(message, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            console.log('[DEBUG] Sending message to background (attempt', i + 1, '):', message);
+            const response = await chrome.runtime.sendMessage(message);
+            console.log('[DEBUG] Background response received:', response);
+            return response;
+        } catch (error) {
+            console.warn('[WARNING] Message send failed (attempt', i + 1, '):', error.message);
+            
+            if (error.message.includes('Could not establish connection') || 
+                error.message.includes('Receiving end does not exist')) {
+                
+                if (i < retries - 1) {
+                    // Wait a bit before retrying to let service worker wake up
+                    console.log('[DEBUG] Waiting 100ms before retry...');
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    continue;
+                } else {
+                    throw new Error('Service worker not responding. Please try again.');
+                }
+            } else {
+                // For other errors, don't retry
+                throw error;
+            }
+        }
+    }
+}
+
 function resetViews() {
     document.getElementById('mainTab').style.display = '';
     document.getElementById('settingsTab').style.display = 'none';
@@ -24,20 +54,24 @@ function showStatus(message, isError) {
 
 function setListeners() {
     // The UI logic and listeners need refactoring.
-    document.querySelectorAll('#options > button').forEach(el => el.addEventListener('click', e => {
+    document.querySelectorAll('#options > button').forEach(el => el.addEventListener('click', async e => {
         behavior = e.target.dataset.behavior;
         if (!e.target.classList.contains('active')) {
-            chrome.runtime.sendMessage({
-                name: 'updateSettings',
-                message: {behavior: behavior}
-            }).then(response => {
-                console.log('[DEBUG] Update behavior response:', response);
+            try {
+                const response = await sendMessageToBackground({
+                    name: 'updateSettings',
+                    message: {behavior: behavior}
+                });
+                
                 if (response && response.name === 'acceptedSettings') {
                     init(); // Refresh UI
+                } else {
+                    showStatus('Failed to update behavior', true);
                 }
-            }).catch(error => {
+            } catch (error) {
                 console.error('[ERROR] Failed to update behavior:', error);
-            });
+                showStatus(error.message, true);
+            }
         }
     }));
     document.getElementById('settingsButton').addEventListener('click', e => {
@@ -47,43 +81,48 @@ function setListeners() {
             document.getElementById('settingsTab').style.display = '';
         });
     });
-    document.getElementById('whitelistButton').addEventListener('click', () => {
-        chrome.tabs.query({currentWindow: true, active: true}, (tabs) => {
-            chrome.runtime.sendMessage({
+    document.getElementById('whitelistButton').addEventListener('click', async () => {
+        try {
+            const tabs = await chrome.tabs.query({currentWindow: true, active: true});
+            const response = await sendMessageToBackground({
                 name: 'addToWhitelist',
                 message: {url: tabs[0].url}
-            }).then(response => {
-                console.log('[DEBUG] Add to whitelist response:', response);
-                if (response && response.name === 'addToWhitelistSuccess') {
-                    showStatus('Added to whitelist');
-                } else if (response && response.name === 'addToWhitelistError') {
-                    showStatus(response.message.error, true);
-                }
-            }).catch(error => {
-                console.error('[ERROR] Failed to add to whitelist:', error);
-                showStatus('Failed to add to whitelist', true);
             });
-        });
+            
+            if (response && response.name === 'addToWhitelistSuccess') {
+                showStatus('Added to whitelist');
+            } else if (response && response.name === 'addToWhitelistError') {
+                showStatus(response.message.error, true);
+            } else {
+                showStatus('Failed to add to whitelist', true);
+            }
+        } catch (error) {
+            console.error('[ERROR] Failed to add to whitelist:', error);
+            showStatus(error.message, true);
+        }
     });
-    document.getElementById('save').addEventListener('click', e => {
+    document.getElementById('save').addEventListener('click', async e => {
         // Check and save here. Notify the background.
         // If the handler sends the message to background for update, the content script could update the settings too.
         let value = document.getElementById('whitelist').value;
-        chrome.runtime.sendMessage({
-            name: 'updateSettings',
-            message: {whitelist: value}
-        }).then(response => {
-            console.log('[DEBUG] Update whitelist response:', response);
+        try {
+            const response = await sendMessageToBackground({
+                name: 'updateSettings',
+                message: {whitelist: value}
+            });
+            
             if (response && response.name === 'acceptedSettings') {
                 showStatus('Settings saved');
                 init(); // Refresh UI
             } else if (response && response.name === 'invalidSettings') {
                 showStatus(response.message, true);
+            } else {
+                showStatus('Failed to save settings', true);
             }
-        }).catch(error => {
+        } catch (error) {
             console.error('[ERROR] Failed to update whitelist:', error);
-            showStatus('Failed to save settings', true);
-        });
+            showStatus(error.message, true);
+        }
     });
     document.getElementById('cancel').addEventListener('click', e => {
         resetViews();
