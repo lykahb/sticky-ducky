@@ -53,11 +53,11 @@ async function sendMessageToServiceWorker(message, retries = 3) {
             const response = await chrome.runtime.sendMessage(message);
             log('Service worker response received:', response);
             return response;
-        } catch (error) {
-            warn('Message send failed (attempt', i + 1, '):', error.message);
+        } catch (err) {
+            warn('Message send failed (attempt', i + 1, '):', err.message);
             
-            if (error.message.includes('Could not establish connection') || 
-                error.message.includes('Receiving end does not exist')) {
+            if (err.message.includes('Could not establish connection') || 
+            err.message.includes('Receiving end does not exist')) {
                 
                 if (i < retries - 1) {
                     // Wait a bit before retrying to let service worker wake up
@@ -70,7 +70,7 @@ async function sendMessageToServiceWorker(message, retries = 3) {
                 }
             } else {
                 // For other errors, don't retry
-                throw error;
+                throw err;
             }
         }
     }
@@ -95,8 +95,8 @@ async function refreshSettings(context = 'unknown') {
             warn('Invalid settings response from', context);
             return false;
         }
-    } catch (error) {
-        error('Failed to refresh settings from', context + ':', error);
+    } catch (err) {
+        error('Failed to refresh settings from', context + ':', err);
         return false;
     }
 }
@@ -406,12 +406,12 @@ function onSheetExplored(result) {
                     if (response && response.name === 'sheetExplored') {
                         onSheetExplored(response.message);
                     }
-                }).catch(error => {
-                    error('Failed to explore sheet:', error);
+                }).catch(err => {
+                    error('Failed to explore sheet:', err);
                     // Mark as failed so we don't keep retrying
                     exploration.externalSheets[result.href] = {
                         status: 'fail',
-                        error: error.message
+                        error: err.message
                     };
                 });
             } else {

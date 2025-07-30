@@ -21,8 +21,8 @@ try {
     log('Libraries loaded successfully');
     log('_ available:', typeof _ !== 'undefined');
     log('CSSWhat available:', typeof CSSWhat !== 'undefined');
-} catch (error) {
-    error('Failed to load libraries:', error);
+} catch (err) {
+    error('Failed to load libraries:', err);
 }
 
 // Service worker for Manifest V3 - handles extension service worker logic
@@ -75,16 +75,16 @@ function safeSendResponse(sendResponse, response, context = 'unknown') {
         log('Sending response for', context, ':', response);
         sendResponse(response);
         return true;
-    } catch (error) {
+    } catch (err) {
         // Catch all connection-related errors
-        const errorMsg = error.message || String(error);
+        const errorMsg = error.message || String(err);
         if (errorMsg.includes('Could not establish connection') || 
             errorMsg.includes('Receiving end does not exist') ||
             errorMsg.includes('Extension context invalidated') ||
             errorMsg.includes('The message port closed before a response was received')) {
             log('Receiving end disconnected, ignoring response for', context);
         } else {
-            error('Failed to send response for', context, ':', error);
+            error('Failed to send response for', context, ':', err);
         }
         return false;
     }
@@ -115,9 +115,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             handleMessageAsync(request, sender, sendResponse);
             return true; // Keep channel open for async responses
         }
-    } catch (error) {
-        error('Message handling failed:', error);
-        safeSendResponse(sendResponse, {name: 'error', message: error.message}, 'error-handler');
+    } catch (err) {
+        error('Message handling failed:', err);
+        safeSendResponse(sendResponse, {name: 'error', message: err.message}, 'error-handler');
         return false;
     }
 });
