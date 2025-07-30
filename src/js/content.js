@@ -1,63 +1,31 @@
 'use strict';
-console.log('[DEBUG] Content script starting...');
-console.log('[DEBUG] _ available:', typeof _ !== 'undefined');
-console.log('[DEBUG] CSSWhat available:', typeof CSSWhat !== 'undefined');
 
-// Helper function to send messages to service worker with retry logic
-async function sendMessageToServiceWorker(message, retries = 3) {
-    for (let i = 0; i < retries; i++) {
-        try {
-            console.log('[DEBUG] Sending message to service worker (attempt', i + 1, '):', message.name);
-            const response = await chrome.runtime.sendMessage(message);
-            console.log('[DEBUG] Service worker response received:', response);
-            return response;
-        } catch (error) {
-            console.warn('[WARNING] Message send failed (attempt', i + 1, '):', error.message);
-            
-            if (error.message.includes('Could not establish connection') || 
-                error.message.includes('Receiving end does not exist')) {
-                
-                if (i < retries - 1) {
-                    // Wait a bit before retrying to let service worker wake up
-                    console.log('[DEBUG] Waiting 200ms before retry...');
-                    await new Promise(resolve => setTimeout(resolve, 200));
-                    continue;
-                } else {
-                    console.error('[ERROR] Service worker not responding after', retries, 'attempts');
-                    throw new Error('Service worker not responding');
-                }
-            } else {
-                // For other errors, don't retry
-                throw error;
-            }
-        }
+let settings = {
+    // This a reference for the settings structure. The values will be updated.
+    isDevelopment: false,
+    behavior: 'scroll',
+    whitelist: {
+        type: 'none',  // ['none', 'page', 'selectors']
+        selectors: []  // optional, if the type is 'selectors'
+    },
+    transitionDuration: 0.2,  // Duration of show/hide animation
+    typesToShow: ['sidebar', 'splash', 'hidden']  // Hidden is here for caution - dimensions of a hidden element are unknown, and it cannot be classified
+};
+
+function internalLog(logger, ...args) {
+    if (settings.isDevelopment) {
+        logger('Sticky Ducky: ', ...args);
     }
 }
 
-// Centralized function to refresh settings from service worker
-async function refreshSettings(context = 'unknown') {
-    try {
-        console.log('[DEBUG] Refreshing settings from context:', context);
-        const locationData = _.omit(window.location, _.isFunction);
-        const response = await sendMessageToServiceWorker({
-            name: 'getSettings',
-            message: {location: locationData}
-        });
-        
-        console.log('[DEBUG] Settings response from', context + ':', response);
-        if (response && response.name === 'settings') {
-            console.log('[DEBUG] Processing settings from', context);
-            onNewSettings(response.message);
-            return true;
-        } else {
-            console.warn('[WARNING] Invalid settings response from', context);
-            return false;
-        }
-    } catch (error) {
-        console.error('[ERROR] Failed to refresh settings from', context + ':', error);
-        return false;
-    }
-}
+const log = (...args) => internalLog(console.log, ...args);
+const warn = (...args) => internalLog(console.warn, ...args);
+const error = (...args) => internalLog(console.error, ...args);
+
+log('Content script starting...');
+log('_ available:', typeof _ !== 'undefined');
+log('CSSWhat available:', typeof CSSWhat !== 'undefined');
+
 
 let exploration = {
     limit: 2,  // Limit for exploration on shorter scroll distance
@@ -72,20 +40,66 @@ let exploration = {
         pseudoElements: []
     }
 };
-let settings = {
-    // This a reference for the settings structure. The values will be updated.
-    isDevelopment: false,
-    behavior: 'scroll',
-    whitelist: {
-        type: 'none',  // ['none', 'page', 'selectors']
-        selectors: []  // optional, if the type is 'selectors'
-    },
-    transitionDuration: 0.2,  // Duration of show/hide animation
-    typesToShow: ['sidebar', 'splash', 'hidden']  // Hidden is here for caution - dimensions of a hidden element are unknown, and it cannot be classified
-};
 let lastKnownScrollY = undefined;
 let stickyFixer = null;
 let scrollListener = _.debounce(_.throttle(ev => doAll(false, false, ev), 300), 50);  // Debounce delay makes it run after the page scroll listeners
+
+
+// Helper function to send messages to service worker with retry logic
+async function sendMessageToServiceWorker(message, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            log('Sending message to service worker (attempt', i + 1, '):', message.name);
+            const response = await chrome.runtime.sendMessage(message);
+            log('Service worker response received:', response);
+            return response;
+        } catch (error) {
+            warn('Message send failed (attempt', i + 1, '):', error.message);
+            
+            if (error.message.includes('Could not establish connection') || 
+                error.message.includes('Receiving end does not exist')) {
+                
+                if (i < retries - 1) {
+                    // Wait a bit before retrying to let service worker wake up
+                    log('Waiting 200ms before retry...');
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    continue;
+                } else {
+                    error('Service worker not responding after', retries, 'attempts');
+                    throw new Error('Service worker not responding');
+                }
+            } else {
+                // For other errors, don't retry
+                throw error;
+            }
+        }
+    }
+}
+
+// Centralized function to refresh settings from service worker
+async function refreshSettings(context = 'unknown') {
+    try {
+        log('Refreshing settings from context:', context);
+        const locationData = _.omit(window.location, _.isFunction);
+        const response = await sendMessageToServiceWorker({
+            name: 'getSettings',
+            message: {location: locationData}
+        });
+        
+        log('Settings response from', context + ':', response);
+        if (response && response.name === 'settings') {
+            log('Processing settings from', context);
+            onNewSettings(response.message);
+            return true;
+        } else {
+            warn('Invalid settings response from', context);
+            return false;
+        }
+    } catch (error) {
+        error('Failed to refresh settings from', context + ':', error);
+        return false;
+    }
+}
 
 class StickyFixer {
     constructor(stylesheet, state, getNewState, makeSelectorForHidden, hiddenStyle) {
@@ -192,7 +206,7 @@ let fixers = {
     },
     'scroll': {
         getNewState: (defaultState, {scrollY, oldState}) => {
-            log('scroll decision', defaultState, scrollY, lastKnownScrollY, oldState);
+            log('Scroll decision', defaultState, scrollY, lastKnownScrollY, oldState);
             return scrollY === lastKnownScrollY && oldState
                 || scrollY < lastKnownScrollY && 'show'
                 || defaultState
@@ -239,12 +253,6 @@ function getDocumentHeight() {
         html.scrollHeight, html.offsetHeight, html.clientHeight);
 }
 
-function log(...args) {
-    if (settings.isDevelopment) {
-        console.log('Sticky Ducky: ', ...args);
-    }
-}
-
 function measure(label, f) {
     if (!settings.isDevelopment) return f();
     const before = window.performance.now();
@@ -282,15 +290,15 @@ function classify(el) {
 }
 
 function onNewSettings(newSettings) {
-    console.log('[DEBUG] onNewSettings called with:', newSettings);
+    log('onNewSettings called with:', newSettings);
     // The new settings may contain only the updated properties
     _.extend(settings, newSettings);
-    console.log('[DEBUG] Settings after update:', settings);
+    log('Settings after update:', settings);
     if (document.readyState === 'loading') {
-        console.log('[DEBUG] Document still loading, waiting for DOMContentLoaded');
+        log('Document still loading, waiting for DOMContentLoaded');
         document.addEventListener('DOMContentLoaded', activateSettings);
     } else {
-        console.log('[DEBUG] Document ready, activating settings immediately');
+        log('Document ready, activating settings immediately');
         activateSettings();
     }
 }
@@ -330,7 +338,7 @@ let exploreStickies = () => {
             el.setAttribute('sticky-ducky-position', getPosition(el));
         }
     });
-    log('explored stickies', els);
+    log('Explored stickies', els);
 };
 
 let getPosition = el => {
@@ -394,12 +402,12 @@ function onSheetExplored(result) {
                     name: 'exploreSheet',
                     message: {href: result.href, baseURI: result.baseURI}
                 }).then(response => {
-                    console.log('[DEBUG] ExploreSheet response:', response);
+                    log('ExploreSheet response:', response);
                     if (response && response.name === 'sheetExplored') {
                         onSheetExplored(response.message);
                     }
                 }).catch(error => {
-                    console.error('[ERROR] Failed to explore sheet:', error);
+                    error('Failed to explore sheet:', error);
                     // Mark as failed so we don't keep retrying
                     exploration.externalSheets[result.href] = {
                         status: 'fail',
@@ -481,33 +489,33 @@ function doAll(forceExplore, settingsChanged, ev) {
 }
 
 if (window.top === window) {  // Don't do anything within an iframe
-    console.log('[DEBUG] Content script initializing (top window)');
+    log('Content script initializing (top window)');
     
     // Listen for messages from service worker (for pushed updates)
     chrome.runtime.onMessage.addListener((request) => {
-        console.log('[DEBUG] Content script received message:', request.name);
+        log('Content script received message:', request.name);
         if (request.name === 'settingsUpdate') {
-            console.log('[DEBUG] Processing settingsUpdate message:', request.message);
+            log('Processing settingsUpdate message:', request.message);
             onNewSettings(request.message);
         } else if (request.name === 'sheetExplored') {
-            console.log('[DEBUG] Processing sheetExplored message:', request.message);
+            log('Processing sheetExplored message:', request.message);
             onSheetExplored(request.message);
         }
     });
     
     // Request initial settings
-    console.log('[DEBUG] Requesting initial settings...');
+    log('Requesting initial settings...');
     refreshSettings('initialization');
 
     // Listen for storage changes
     chrome.storage.onChanged.addListener((changes) => {
-        console.log('[DEBUG] Storage changed:', changes);
+        log('Storage changed:', changes);
         
         // Add a small delay to avoid race conditions with page navigation
         setTimeout(() => {
             // Check if we're still the active content script
             if (window.top !== window || document.hidden) {
-                console.log('[DEBUG] Skipping settings refresh - not active window');
+                log('Skipping settings refresh - not active window');
                 return;
             }
             
@@ -517,7 +525,7 @@ if (window.top === window) {  // Don't do anything within an iframe
     });
 
     document.addEventListener('readystatechange', () => {
-        console.log('[DEBUG] Document ready state changed to:', document.readyState);
+        log('Document ready state changed to:', document.readyState);
         // Run several times waiting for JS on the page to do the changes affecting scrolling and stickies
         [0, 500].forEach(t => setTimeout(() => stickyFixer && doAll(true, false), t));
     });
@@ -525,26 +533,26 @@ if (window.top === window) {  // Don't do anything within an iframe
     // Listen for tab becoming active/visible to refresh settings
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
-            console.log('[DEBUG] Tab became visible');
+            log('Tab became visible');
             refreshSettings('tab-visible');
         }
     });
 
     // Listen for window focus (additional activation detection)
     window.addEventListener('focus', () => {
-        console.log('[DEBUG] Window gained focus');
+        log('Window gained focus');
         refreshSettings('window-focus');
     });
 
     // Listen for pageshow (back/forward navigation)
     window.addEventListener('pageshow', (event) => {
         if (event.persisted) {
-            console.log('[DEBUG] Page shown from cache');
+            log('Page shown from cache');
             refreshSettings('pageshow-cache');
         }
     });
     
-    console.log('[DEBUG] Content script initialization complete');
+    log('Content script initialization complete');
 } else {
-    console.log('[DEBUG] Content script skipped (iframe)');
+    log('Content script skipped (iframe)');
 }
