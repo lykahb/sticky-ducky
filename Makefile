@@ -3,7 +3,7 @@ DIST := dist/
 prepare:
 	mkdir -p ${DIST}
 	cp -R assets lib src/popup.html LICENSE ${DIST}
-	cp src/js/background.js ${DIST}
+	cp src/js/service-worker.js ${DIST}
 	cp src/js/content.js ${DIST}
 	cp src/js/explorer.js ${DIST}
 	cp src/js/whitelist.js ${DIST}

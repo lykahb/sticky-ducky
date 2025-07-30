@@ -27,7 +27,7 @@
     "128": "assets/icon128.png"
   },
   "background": {
-    "scripts": ["background.js"]
+    "scripts": ["service-worker.js"]
   },
   "content_scripts": [
     {

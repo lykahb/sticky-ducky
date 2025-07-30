@@ -13,7 +13,7 @@ try {
     console.error('[ERROR] Failed to load libraries:', error);
 }
 
-// Consolidated background service worker for Manifest V3
+// Service worker for Manifest V3 - handles extension service worker logic
 let settings = {};
 console.log('[DEBUG] Settings object initialized');
 
@@ -58,16 +58,20 @@ function initializeSettings() {
     });
 }
 
-// Helper function to safely send responses (handles closed popup)
+// Helper function to safely send responses (handles closed popup/content script)
 function safeSendResponse(sendResponse, response, context = 'unknown') {
     try {
         console.log('[DEBUG] Sending response for', context, ':', response);
         sendResponse(response);
         return true;
     } catch (error) {
-        if (error.message.includes('Could not establish connection') || 
-            error.message.includes('Receiving end does not exist')) {
-            console.log('[DEBUG] Receiving end closed (popup/content script disconnected), ignoring response for', context);
+        // Catch all connection-related errors
+        const errorMsg = error.message || String(error);
+        if (errorMsg.includes('Could not establish connection') || 
+            errorMsg.includes('Receiving end does not exist') ||
+            errorMsg.includes('Extension context invalidated') ||
+            errorMsg.includes('The message port closed before a response was received')) {
+            console.log('[DEBUG] Receiving end disconnected, ignoring response for', context);
         } else {
             console.error('[ERROR] Failed to send response for', context, ':', error);
         }
@@ -81,13 +85,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     console.log('[DEBUG] Message received:', request.name, 'from:', sender.tab ? 'content script' : 'popup');
     console.log('[DEBUG] Message data:', request.message);
     
+    // Check if sender is still valid (for content scripts)
+    if (sender.tab && sender.tab.id < 0) {
+        console.log('[DEBUG] Invalid sender tab, ignoring message');
+        return false;
+    }
+    
     // Handle message synchronously for V3
     try {
         const response = handleMessageSync(request, sender);
         if (response) {
             console.log('[DEBUG] Sending immediate response via safeSendResponse:', response);
             // Use safeSendResponse for immediate responses in V3
-            safeSendResponse(sendResponse, response, request.name);
+            const sent = safeSendResponse(sendResponse, response, request.name);
             return false; // Don't keep the channel open
         } else {
             // For async operations, handle differently
@@ -121,7 +131,7 @@ function handleMessageAsync(request, sender, sendResponse) {
     switch(request.name) {
         case 'exploreSheet':
             // Explorer functionality should be handled by content script in V3
-            console.warn('[WARNING] exploreSheet should be handled by content script, not background');
+            console.warn('[WARNING] exploreSheet should be handled by content script, not service worker');
             safeSendResponse(sendResponse, {name: 'sheetExplored', message: {status: 'fail', error: 'exploreSheet not supported in service worker'}}, 'exploreSheet');
             break;
         default:

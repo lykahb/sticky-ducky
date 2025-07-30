@@ -3,13 +3,13 @@ console.log('[DEBUG] Popup script starting...');
 let initialized = false;
 let behavior = null;
 
-// Helper function to send messages to background with retry logic
-async function sendMessageToBackground(message, retries = 3) {
+// Helper function to send messages to service worker with retry logic
+async function sendMessageToServiceWorker(message, retries = 3) {
     for (let i = 0; i < retries; i++) {
         try {
-            console.log('[DEBUG] Sending message to background (attempt', i + 1, '):', message);
+            console.log('[DEBUG] Sending message to service worker (attempt', i + 1, '):', message);
             const response = await chrome.runtime.sendMessage(message);
-            console.log('[DEBUG] Background response received:', response);
+            console.log('[DEBUG] Service worker response received:', response);
             return response;
         } catch (error) {
             console.warn('[WARNING] Message send failed (attempt', i + 1, '):', error.message);
@@ -58,7 +58,7 @@ function setListeners() {
         behavior = e.target.dataset.behavior;
         if (!e.target.classList.contains('active')) {
             try {
-                const response = await sendMessageToBackground({
+                const response = await sendMessageToServiceWorker({
                     name: 'updateSettings',
                     message: {behavior: behavior}
                 });
@@ -84,7 +84,7 @@ function setListeners() {
     document.getElementById('whitelistButton').addEventListener('click', async () => {
         try {
             const tabs = await chrome.tabs.query({currentWindow: true, active: true});
-            const response = await sendMessageToBackground({
+            const response = await sendMessageToServiceWorker({
                 name: 'addToWhitelist',
                 message: {url: tabs[0].url}
             });
@@ -102,11 +102,11 @@ function setListeners() {
         }
     });
     document.getElementById('save').addEventListener('click', async e => {
-        // Check and save here. Notify the background.
-        // If the handler sends the message to background for update, the content script could update the settings too.
+        // Check and save here. Notify the service worker.
+        // If the handler sends the message to service worker for update, the content script could update the settings too.
         let value = document.getElementById('whitelist').value;
         try {
-            const response = await sendMessageToBackground({
+            const response = await sendMessageToServiceWorker({
                 name: 'updateSettings',
                 message: {whitelist: value}
             });
@@ -168,11 +168,11 @@ chrome.tabs.query({currentWindow: true, active: true}, (tabs) => {
     );
 });
 
-// Message handling (for pushed updates from background)
+// Message handling (for pushed updates from service worker)
 console.log('[DEBUG] Setting up popup message listeners');
 chrome.runtime.onMessage.addListener((request) => {
     console.log('[DEBUG] Popup received pushed message:', request.name);
-    // Handle any pushed messages from background if needed
+    // Handle any pushed messages from service worker if needed
 });
 
 // Initialize popup

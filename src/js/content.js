@@ -3,13 +3,13 @@ console.log('[DEBUG] Content script starting...');
 console.log('[DEBUG] _ available:', typeof _ !== 'undefined');
 console.log('[DEBUG] CSSWhat available:', typeof CSSWhat !== 'undefined');
 
-// Helper function to send messages to background with retry logic
-async function sendMessageToBackground(message, retries = 3) {
+// Helper function to send messages to service worker with retry logic
+async function sendMessageToServiceWorker(message, retries = 3) {
     for (let i = 0; i < retries; i++) {
         try {
-            console.log('[DEBUG] Sending message to background (attempt', i + 1, '):', message.name);
+            console.log('[DEBUG] Sending message to service worker (attempt', i + 1, '):', message.name);
             const response = await chrome.runtime.sendMessage(message);
-            console.log('[DEBUG] Background response received:', response);
+            console.log('[DEBUG] Service worker response received:', response);
             return response;
         } catch (error) {
             console.warn('[WARNING] Message send failed (attempt', i + 1, '):', error.message);
@@ -362,10 +362,10 @@ function onSheetExplored(result) {
         if (result.status === 'fail') {
             if (sheetInfo.status === 'unexplored') {
                 exploration.externalSheets[result.href] = {
-                    status: 'awaitingBackgroundFetch',
+                    status: 'awaitingServiceWorkerFetch',
                     error: result.error
                 };
-                sendMessageToBackground({
+                sendMessageToServiceWorker({
                     name: 'exploreSheet',
                     message: {href: result.href, baseURI: result.baseURI}
                 }).then(response => {
@@ -418,6 +418,10 @@ function onNewSelectors(selectorDescriptions) {
 }
 
 function doAll(forceExplore, settingsChanged, ev) {
+    if (!stickyFixer) {
+        // This may happen if the doAll is scheduled asynchronously, and the sticky ducky got disabled. That could be done with whitelist or "always" behavior.
+        return;
+    }
     let forceUpdate = settingsChanged;
     let scrollInfo = {
         scrollY: window.scrollY,
@@ -454,7 +458,7 @@ function doAll(forceExplore, settingsChanged, ev) {
 if (window.top === window) {  // Don't do anything within an iframe
     console.log('[DEBUG] Content script initializing (top window)');
     
-    // Listen for messages from background script (for pushed updates)
+    // Listen for messages from service worker (for pushed updates)
     chrome.runtime.onMessage.addListener((request) => {
         console.log('[DEBUG] Content script received message:', request.name);
         if (request.name === 'settingsUpdate') {
@@ -471,7 +475,7 @@ if (window.top === window) {  // Don't do anything within an iframe
     try {
         const locationData = _.omit(window.location, _.isFunction);
         console.log('[DEBUG] Location data:', locationData);
-        sendMessageToBackground({
+        sendMessageToServiceWorker({
             name: 'getSettings',
             message: {location: locationData}
         }).then(response => {
@@ -491,19 +495,29 @@ if (window.top === window) {  // Don't do anything within an iframe
     // Listen for storage changes
     chrome.storage.onChanged.addListener((changes) => {
         console.log('[DEBUG] Storage changed:', changes);
-        // Retrieve settings again when storage changes
-        sendMessageToBackground({
-            name: 'getSettings',
-            message: {location: _.omit(window.location, _.isFunction)}
-        }).then(response => {
-            console.log('[DEBUG] Settings response from storage change:', response);
-            if (response && response.name === 'settings') {
-                onNewSettings(response.message);
+        
+        // Add a small delay to avoid race conditions with page navigation
+        setTimeout(() => {
+            // Check if we're still the active content script
+            if (window.top !== window || document.hidden) {
+                console.log('[DEBUG] Skipping settings refresh - not active window');
+                return;
             }
-        }).catch(error => {
-            console.error('[ERROR] Failed to get settings after storage change:', error);
-            // Continue silently - storage change failures shouldn't break functionality
-        });
+            
+            // Retrieve settings again when storage changes
+            sendMessageToServiceWorker({
+                name: 'getSettings',
+                message: {location: _.omit(window.location, _.isFunction)}
+            }).then(response => {
+                console.log('[DEBUG] Settings response from storage change:', response);
+                if (response && response.name === 'settings') {
+                    onNewSettings(response.message);
+                }
+            }).catch(error => {
+                console.error('[ERROR] Failed to get settings after storage change:', error);
+                // Continue silently - storage change failures shouldn't break functionality
+            });
+        }, 100); // Small delay to avoid race conditions
     });
 
     document.addEventListener('readystatechange', () => {
