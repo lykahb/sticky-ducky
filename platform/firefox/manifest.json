@@ -1,21 +1,24 @@
 {
-  "manifest_version": 2,
+  "manifest_version": 3,
   "name": "Sticky Ducky",
   "author": "Boris Lykah",
   "description": "Automatically cleans pages of the sticky headers and other fixed elements",
-  "version": "1.7.2",
-  "applications": {
+  "version": "2.0.0",
+  "browser_specific_settings": {
     "gecko": {
       "id": "sticky-ducky@addons.mozilla.org",
-      "strict_min_version": "52.0"
+      "strict_min_version": "109.0"
     }
   },
   "permissions": [
     "tabs",
     "storage",
+    "scripting"
+  ],
+  "host_permissions": [
     "<all_urls>"
   ],
-  "browser_action": {
+  "action": {
     "default_popup": "popup.html",
     "default_icon": "assets/icon48.png"
   },
@@ -24,14 +27,7 @@
     "128": "assets/icon128.png"
   },
   "background": {
-    "scripts": [
-      "lib/underscore.js",
-      "lib/css-what.js",
-      "js/vapiBackground.js",
-      "js/explorer.js",
-      "js/whitelist.js",
-      "js/background.js"
-    ]
+    "scripts": ["background.js"]
   },
   "content_scripts": [
     {
@@ -42,9 +38,8 @@
       "js": [
         "lib/underscore.js",
         "lib/css-what.js",
-        "js/vapiInjected.js",
-        "js/explorer.js",
-        "js/content.js"
+        "explorer.js",
+        "content.js"
       ],
       "run_at": "document_start"
     }

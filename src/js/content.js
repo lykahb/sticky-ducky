@@ -326,8 +326,9 @@ function onSheetExplored(result) {
                     status: 'awaitingBackgroundFetch',
                     error: result.error
                 };
-                vAPI.sendToBackground('exploreSheet', {
-                    href: result.href, baseURI: result.baseURI
+                chrome.runtime.sendMessage({
+                    name: 'exploreSheet',
+                    message: {href: result.href, baseURI: result.baseURI}
                 });
             } else {
                 exploration.externalSheets[result.href] = {
@@ -400,9 +401,31 @@ function doAll(forceExplore, settingsChanged, ev) {
 }
 
 if (window.top === window) {  // Don't do anything within an iframe
-    vAPI.listen('settings', settings => onNewSettings(settings));
-    vAPI.listen('sheetExplored', message => onSheetExplored(message));
-    vAPI.sendToBackground('getSettings', {location: _.omit(window.location, _.isFunction)});
+    // Listen for messages from background script
+    chrome.runtime.onMessage.addListener((request) => {
+        if (request.name === 'settings') {
+            onNewSettings(request.message);
+        } else if (request.name === 'sheetExplored') {
+            onSheetExplored(request.message);
+        } else if (request.name === 'settingsUpdate') {
+            onNewSettings(request.message);
+        }
+    });
+    
+    // Request initial settings
+    chrome.runtime.sendMessage({
+        name: 'getSettings',
+        message: {location: _.omit(window.location, _.isFunction)}
+    });
+
+    // Listen for storage changes
+    chrome.storage.onChanged.addListener((changes) => {
+        // Retrieve settings again when storage changes
+        chrome.runtime.sendMessage({
+            name: 'getSettings',
+            message: {location: _.omit(window.location, _.isFunction)}
+        });
+    });
 
     document.addEventListener('readystatechange', () => {
         // Run several times waiting for JS on the page to do the changes affecting scrolling and stickies
