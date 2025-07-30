@@ -168,11 +168,6 @@ function handleUpdateSettingsSync(message) {
 
     chrome.storage.local.set(message);
 
-    // Update all tabs only if the behavior changed.
-    if (message.behavior) {
-        console.log('[DEBUG] Sending behavior update to all tabs');
-        sendSettingsToAllTabs({behavior: message.behavior});
-    }
     console.log('[DEBUG] Returning acceptedSettings response');
     return {name: 'acceptedSettings'};
 }
@@ -203,16 +198,4 @@ function handleAddToWhitelistSync(message) {
     settings.parsedWhitelist = parseRules(settings.whitelist);
     chrome.storage.local.set({whitelist: settings.whitelist});
     return {name: 'addToWhitelistSuccess'};
-}
-
-function sendSettingsToAllTabs(settingsToSend) {
-    chrome.tabs.query({}, (tabs) => {
-        tabs.forEach(tab => {
-            try {
-                chrome.tabs.sendMessage(tab.id, {name: 'settingsUpdate', message: settingsToSend});
-            } catch (e) {
-                console.error(e);
-            }
-        });
-    });
 }
