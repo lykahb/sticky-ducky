@@ -12,20 +12,25 @@ const log = (...args) => internalLog(console.log, ...args);
 const warn = (...args) => internalLog(console.warn, ...args);
 const error = (...args) => console.error('Sticky Ducky: ', ...args);
 
-log('Service worker starting...');
-
-// Import libraries at the top (service worker supports importScripts)
-try {
-    log('Loading libraries...');
-    importScripts('lib/underscore.js', 'lib/css-what.js', 'whitelist.js');
-    log('Libraries loaded successfully');
-    log('_ available:', typeof _ !== 'undefined');
-    log('CSSWhat available:', typeof CSSWhat !== 'undefined');
-} catch (err) {
-    error('Failed to load libraries:', err);
+// Import libraries - different approach for Chrome vs Firefox
+if (typeof importScripts !== 'undefined') {
+    // Chrome service worker context
+    try {
+        log('Loading libraries via importScripts...');
+        importScripts('lib/underscore.js', 'whitelist.js');
+        log('Libraries loaded successfully via importScripts');
+    } catch (err) {
+        error('Failed to load libraries via importScripts:', err);
+    }
+} else {
+    // Firefox background script context - libraries loaded via manifest
+    log('Libraries should be loaded via manifest (Firefox)');
 }
 
-// Service worker for Manifest V3 - handles extension service worker logic
+// Libraries loaded via manifest for both Chrome and Firefox
+log('_ available:', typeof _ !== 'undefined');
+
+log('Service worker starting...');
 
 // Service worker initialization
 chrome.runtime.onStartup.addListener(() => {

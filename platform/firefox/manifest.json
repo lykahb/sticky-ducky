@@ -27,7 +27,11 @@
     "128": "assets/icon128.png"
   },
   "background": {
-    "scripts": ["service-worker.js"]
+    "scripts": [
+      "lib/underscore.js",
+      "whitelist.js",
+      "service-worker.js"
+    ]
   },
   "content_scripts": [
     {
