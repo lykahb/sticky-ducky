@@ -6,6 +6,7 @@ prepare:
 	cp src/js/background.js ${DIST}
 	cp src/js/content.js ${DIST}
 	cp src/js/explorer.js ${DIST}
+	cp src/js/whitelist.js ${DIST}
 	cp src/js/popup.js ${DIST}
 
 firefox: DIST := ${DIST}/firefox

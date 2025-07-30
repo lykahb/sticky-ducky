@@ -92,7 +92,17 @@ function matchWhitelist(whitelist, location) {
 
 function canSelectorBeUsed(selector) {
     try {
-        document.querySelectorAll(`*:not(${selector})`);
+        // This is the selector that the content script will use.
+        // For some selectors this syntax is invalid.
+        const modifiedSelector = `*:not(${selector})`;
+        if (document) {
+            document.querySelectorAll(modifiedSelector);
+        } else {
+            // In service worker, we don't have access to document
+            // This validation will need to be done in content script if needed
+            // Basic syntax validation using CSS-what parser
+            CSSWhat.parse(modifiedSelector);
+        }
         return true;
     } catch (e) {
         return false;
