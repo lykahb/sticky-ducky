@@ -1,4 +1,8 @@
 'use strict';
+console.log('[DEBUG] Content script starting...');
+console.log('[DEBUG] _ available:', typeof _ !== 'undefined');
+console.log('[DEBUG] CSSWhat available:', typeof CSSWhat !== 'undefined');
+
 let exploration = {
     limit: 2,  // Limit for exploration on shorter scroll distance
     lastScrollY: 0,  // Keeps track of the scroll position during the last exploration
@@ -222,11 +226,15 @@ function classify(el) {
 }
 
 function onNewSettings(newSettings) {
+    console.log('[DEBUG] onNewSettings called with:', newSettings);
     // The new settings may contain only the updated properties
     _.extend(settings, newSettings);
+    console.log('[DEBUG] Settings after update:', settings);
     if (document.readyState === 'loading') {
+        console.log('[DEBUG] Document still loading, waiting for DOMContentLoaded');
         document.addEventListener('DOMContentLoaded', activateSettings);
     } else {
+        console.log('[DEBUG] Document ready, activating settings immediately');
         activateSettings();
     }
 }
@@ -329,6 +337,13 @@ function onSheetExplored(result) {
                 chrome.runtime.sendMessage({
                     name: 'exploreSheet',
                     message: {href: result.href, baseURI: result.baseURI}
+                }).then(response => {
+                    console.log('[DEBUG] ExploreSheet response:', response);
+                    if (response && response.name === 'sheetExplored') {
+                        onSheetExplored(response.message);
+                    }
+                }).catch(error => {
+                    console.error('[ERROR] Failed to explore sheet:', error);
                 });
             } else {
                 exploration.externalSheets[result.href] = {
@@ -401,34 +416,65 @@ function doAll(forceExplore, settingsChanged, ev) {
 }
 
 if (window.top === window) {  // Don't do anything within an iframe
-    // Listen for messages from background script
+    console.log('[DEBUG] Content script initializing (top window)');
+    
+    // Listen for messages from background script (for pushed updates)
     chrome.runtime.onMessage.addListener((request) => {
-        if (request.name === 'settings') {
+        console.log('[DEBUG] Content script received message:', request.name);
+        if (request.name === 'settingsUpdate') {
+            console.log('[DEBUG] Processing settingsUpdate message:', request.message);
             onNewSettings(request.message);
         } else if (request.name === 'sheetExplored') {
+            console.log('[DEBUG] Processing sheetExplored message:', request.message);
             onSheetExplored(request.message);
-        } else if (request.name === 'settingsUpdate') {
-            onNewSettings(request.message);
         }
     });
     
     // Request initial settings
-    chrome.runtime.sendMessage({
-        name: 'getSettings',
-        message: {location: _.omit(window.location, _.isFunction)}
-    });
+    console.log('[DEBUG] Requesting initial settings...');
+    try {
+        const locationData = _.omit(window.location, _.isFunction);
+        console.log('[DEBUG] Location data:', locationData);
+        chrome.runtime.sendMessage({
+            name: 'getSettings',
+            message: {location: locationData}
+        }).then(response => {
+            console.log('[DEBUG] Settings response received:', response);
+            if (response && response.name === 'settings') {
+                console.log('[DEBUG] Processing settings from Promise response');
+                onNewSettings(response.message);
+            }
+        }).catch(error => {
+            console.error('[ERROR] Failed to get settings:', error);
+        });
+    } catch (error) {
+        console.error('[ERROR] Failed to send getSettings message:', error);
+    }
 
     // Listen for storage changes
     chrome.storage.onChanged.addListener((changes) => {
+        console.log('[DEBUG] Storage changed:', changes);
         // Retrieve settings again when storage changes
         chrome.runtime.sendMessage({
             name: 'getSettings',
             message: {location: _.omit(window.location, _.isFunction)}
+        }).then(response => {
+            console.log('[DEBUG] Settings response from storage change:', response);
+            if (response && response.name === 'settings') {
+                onNewSettings(response.message);
+            }
+        }).catch(error => {
+            console.error('[ERROR] Failed to get settings after storage change:', error);
         });
     });
 
     document.addEventListener('readystatechange', () => {
+        console.log('[DEBUG] Document ready state changed to:', document.readyState);
         // Run several times waiting for JS on the page to do the changes affecting scrolling and stickies
         [0, 500].forEach(t => setTimeout(() => stickyFixer && doAll(true, false), t));
     });
+    
+    console.log('[DEBUG] Content script initialization complete');
+} else {
+    console.log('[DEBUG] Content script skipped (iframe)');
 }

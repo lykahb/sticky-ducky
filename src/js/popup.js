@@ -1,4 +1,5 @@
 'use strict';
+console.log('[DEBUG] Popup script starting...');
 let initialized = false;
 let behavior = null;
 
@@ -29,6 +30,13 @@ function setListeners() {
             chrome.runtime.sendMessage({
                 name: 'updateSettings',
                 message: {behavior: behavior}
+            }).then(response => {
+                console.log('[DEBUG] Update behavior response:', response);
+                if (response && response.name === 'acceptedSettings') {
+                    init(); // Refresh UI
+                }
+            }).catch(error => {
+                console.error('[ERROR] Failed to update behavior:', error);
             });
         }
     }));
@@ -44,6 +52,16 @@ function setListeners() {
             chrome.runtime.sendMessage({
                 name: 'addToWhitelist',
                 message: {url: tabs[0].url}
+            }).then(response => {
+                console.log('[DEBUG] Add to whitelist response:', response);
+                if (response && response.name === 'addToWhitelistSuccess') {
+                    showStatus('Added to whitelist');
+                } else if (response && response.name === 'addToWhitelistError') {
+                    showStatus(response.message.error, true);
+                }
+            }).catch(error => {
+                console.error('[ERROR] Failed to add to whitelist:', error);
+                showStatus('Failed to add to whitelist', true);
             });
         });
     });
@@ -54,6 +72,17 @@ function setListeners() {
         chrome.runtime.sendMessage({
             name: 'updateSettings',
             message: {whitelist: value}
+        }).then(response => {
+            console.log('[DEBUG] Update whitelist response:', response);
+            if (response && response.name === 'acceptedSettings') {
+                showStatus('Settings saved');
+                init(); // Refresh UI
+            } else if (response && response.name === 'invalidSettings') {
+                showStatus(response.message, true);
+            }
+        }).catch(error => {
+            console.error('[ERROR] Failed to update whitelist:', error);
+            showStatus('Failed to save settings', true);
         });
     });
     document.getElementById('cancel').addEventListener('click', e => {
@@ -66,9 +95,12 @@ function setListeners() {
 }
 
 function init() {
+    console.log('[DEBUG] Popup init called');
     chrome.storage.local.get(['behavior'], (settings) => {
+        console.log('[DEBUG] Popup storage get result:', settings);
         behavior = settings.behavior;
         if (!initialized) {
+            console.log('[DEBUG] Setting up popup listeners');
             setListeners();
             initialized = true;
         }
@@ -78,6 +110,7 @@ function init() {
         if (activeOption) activeOption.classList.remove('active');
 
         if (behavior) {
+            console.log('[DEBUG] Setting active behavior button:', behavior);
             document.querySelector(`#options > button[data-behavior=${behavior}]`).classList.add('active');
         }
         resetViews();
@@ -96,18 +129,13 @@ chrome.tabs.query({currentWindow: true, active: true}, (tabs) => {
     );
 });
 
-// Message handling
+// Message handling (for pushed updates from background)
+console.log('[DEBUG] Setting up popup message listeners');
 chrome.runtime.onMessage.addListener((request) => {
-    if (request.name === 'invalidSettings') {
-        showStatus(request.message, true);
-    } else if (request.name === 'acceptedSettings') {
-        init();
-    } else if (request.name === 'addToWhitelistError') {
-        showStatus(request.message.error, true);
-    } else if (request.name === 'addToWhitelistSuccess') {
-        showStatus('Added to whitelist');
-    }
+    console.log('[DEBUG] Popup received pushed message:', request.name);
+    // Handle any pushed messages from background if needed
 });
 
 // Initialize popup
+console.log('[DEBUG] Initializing popup...');
 init();
