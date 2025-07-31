@@ -494,9 +494,18 @@ if (window.top === window) {  // Don't do anything within an iframe
     // Listen for messages from service worker (for pushed updates)
     chrome.runtime.onMessage.addListener((request) => {
         log('Content script received message:', request.name);
-        if (request.name === 'settingsUpdate') {
-            log('Processing settingsUpdate message:', request.message);
-            onNewSettings(request.message);
+        if (request.name === 'temporaryShowStickies') {
+            // Show once. Disabling the stylesheet is simpler than setting and resetting the behavior.
+            if (stickyFixer && stickyFixer.stylesheet) {
+                stickyFixer.stylesheet.disabled = true;
+            }
+        
+            // Restore the previous behavior after a short delay
+            setTimeout(() => {
+                if (stickyFixer && stickyFixer.stylesheet) {
+                    stickyFixer.stylesheet.disabled = false;
+                }
+            }, 1000);
         } else if (request.name === 'sheetExplored') {
             log('Processing sheetExplored message:', request.message);
             onSheetExplored(request.message);

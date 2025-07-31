@@ -1,25 +1,35 @@
 'use strict';
-console.log('[DEBUG] Popup script starting...');
+
+let settings = {};
+function internalLog(logger, ...args) {
+    if (settings.isDevelopment) {
+        logger('Sticky Ducky: ', ...args);
+    }
+}
+
+const log = (...args) => internalLog(console.log, ...args);
+const warn = (...args) => internalLog(console.warn, ...args);
+const error = (...args) => console.error('Sticky Ducky: ', ...args);
+
 let initialized = false;
-let behavior = null;
 
 // Helper function to send messages to service worker with retry logic
 async function sendMessageToServiceWorker(message, retries = 3) {
     for (let i = 0; i < retries; i++) {
         try {
-            console.log('[DEBUG] Sending message to service worker (attempt', i + 1, '):', message);
+            log('Sending message to service worker (attempt', i + 1, '):', message);
             const response = await chrome.runtime.sendMessage(message);
-            console.log('[DEBUG] Service worker response received:', response);
+            log('Service worker response received:', response);
             return response;
-        } catch (error) {
-            console.warn('[WARNING] Message send failed (attempt', i + 1, '):', error.message);
+        } catch (err) {
+            warn('Message send failed (attempt', i + 1, '):', err.message);
             
-            if (error.message.includes('Could not establish connection') || 
-                error.message.includes('Receiving end does not exist')) {
+            if (err.message.includes('Could not establish connection') || 
+                err.message.includes('Receiving end does not exist')) {
                 
                 if (i < retries - 1) {
                     // Wait a bit before retrying to let service worker wake up
-                    console.log('[DEBUG] Waiting 100ms before retry...');
+                    log('Waiting 100ms before retry...');
                     await new Promise(resolve => setTimeout(resolve, 100));
                     continue;
                 } else {
@@ -27,7 +37,7 @@ async function sendMessageToServiceWorker(message, retries = 3) {
                 }
             } else {
                 // For other errors, don't retry
-                throw error;
+                throw err;
             }
         }
     }
@@ -55,7 +65,7 @@ function showStatus(message, isError) {
 function setListeners() {
     // The UI logic and listeners need refactoring.
     document.querySelectorAll('#options > button').forEach(el => el.addEventListener('click', async e => {
-        behavior = e.target.dataset.behavior;
+        const behavior = e.target.dataset.behavior;
         if (!e.target.classList.contains('active')) {
             try {
                 const response = await sendMessageToServiceWorker({
@@ -68,9 +78,9 @@ function setListeners() {
                 } else {
                     showStatus('Failed to update behavior', true);
                 }
-            } catch (error) {
-                console.error('[ERROR] Failed to update behavior:', error);
-                showStatus(error.message, true);
+            } catch (err) {
+                error('Failed to update behavior:', err);
+                showStatus(err.message, true);
             }
         }
     }));
@@ -96,9 +106,9 @@ function setListeners() {
             } else {
                 showStatus('Failed to add to whitelist', true);
             }
-        } catch (error) {
-            console.error('[ERROR] Failed to add to whitelist:', error);
-            showStatus(error.message, true);
+        } catch (err) {
+            error('Failed to add to whitelist:', err);
+            showStatus(err.message, true);
         }
     });
     document.getElementById('save').addEventListener('click', async e => {
@@ -119,9 +129,9 @@ function setListeners() {
             } else {
                 showStatus('Failed to save settings', true);
             }
-        } catch (error) {
-            console.error('[ERROR] Failed to update whitelist:', error);
-            showStatus(error.message, true);
+        } catch (err) {
+            error('Failed to update whitelist:', err);
+            showStatus(err.message, true);
         }
     });
     document.getElementById('cancel').addEventListener('click', e => {
@@ -134,12 +144,12 @@ function setListeners() {
 }
 
 function init() {
-    console.log('[DEBUG] Popup init called');
-    chrome.storage.local.get(['behavior'], (settings) => {
-        console.log('[DEBUG] Popup storage get result:', settings);
-        behavior = settings.behavior;
+    log('Popup init called');
+    chrome.storage.local.get(['behavior', 'isDevelopment'], (result) => {
+        log('Popup storage get result:', result);
+        settings = result;
         if (!initialized) {
-            console.log('[DEBUG] Setting up popup listeners');
+            log('Setting up popup listeners');
             setListeners();
             initialized = true;
         }
@@ -148,9 +158,9 @@ function init() {
         let activeOption = document.querySelector(`#options > button.active`);
         if (activeOption) activeOption.classList.remove('active');
 
-        if (behavior) {
-            console.log('[DEBUG] Setting active behavior button:', behavior);
-            document.querySelector(`#options > button[data-behavior=${behavior}]`).classList.add('active');
+        if (settings.behavior) {
+            log('Setting active behavior button:', settings.behavior);
+            document.querySelector(`#options > button[data-behavior=${settings.behavior}]`).classList.add('active');
         }
         resetViews();
     });
@@ -159,22 +169,17 @@ function init() {
 // Temporarily display stickies when clicked on the extension button.
 // It should be outside of init, because init is called when the settings changed.
 chrome.tabs.query({currentWindow: true, active: true}, (tabs) => {
-    chrome.tabs.sendMessage(tabs[0].id, {name: 'settings', message: {behavior: 'always'}});
-
-    window.addEventListener('unload', ev => {
-            chrome.tabs.sendMessage(tabs[0].id, {name: 'settings', message: {behavior: behavior}});
-        },
-        {once: true}
-    );
+    log('Show all stickies for the current tab:', {behavior: 'always'});
+    chrome.tabs.sendMessage(tabs[0].id, {name: 'temporaryShowStickies', message: {behavior: 'always'}});
 });
 
 // Message handling (for pushed updates from service worker)
-console.log('[DEBUG] Setting up popup message listeners');
+log('Setting up popup message listeners');
 chrome.runtime.onMessage.addListener((request) => {
-    console.log('[DEBUG] Popup received pushed message:', request.name);
+    log('Popup received pushed message:', request.name);
     // Handle any pushed messages from service worker if needed
 });
 
 // Initialize popup
-console.log('[DEBUG] Initializing popup...');
+log('Initializing popup...');
 init();
