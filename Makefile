@@ -1,4 +1,4 @@
-DIST := dist/
+DIST := dist
 
 prepare:
 	mkdir -p ${DIST}

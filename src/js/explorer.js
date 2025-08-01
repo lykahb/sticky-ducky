@@ -88,7 +88,8 @@ class Explorer {
                 document.body.appendChild(iframe);
                 let iframeDoc = iframe.contentDocument;
                 // We need base for @import with relative urls. BaseURI may be on a different domain than href.
-                iframeDoc.head.appendChild(iframeDoc.createElement('base')).href = nestedBaseURI;
+                // Commented out because this doesn't play well with CSP.
+                // iframeDoc.head.appendChild(iframeDoc.createElement('base')).href = nestedBaseURI;
                 let style = iframeDoc.head.appendChild(iframeDoc.createElement('style'));
                 style.textContent = text;
                 return this.exploreRules(style.sheet, absoluteURL);

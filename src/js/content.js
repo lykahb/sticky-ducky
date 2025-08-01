@@ -392,9 +392,12 @@ function onSheetExplored(result) {
     }
     if (result.href) {
         let sheetInfo = exploration.externalSheets[result.href];
+        let newSheetInfo = null;
         if (result.status === 'fail') {
-            if (sheetInfo.status === 'unexplored') {
-                exploration.externalSheets[result.href] = {
+            // It can fail because of CORS
+            warn('Failed to explore sheet on the content page:', result);
+            if (sheetInfo && sheetInfo.status === 'unexplored') {
+                newSheetInfo = {
                     status: 'awaitingServiceWorkerFetch',
                     error: result.error
                 };
@@ -407,7 +410,7 @@ function onSheetExplored(result) {
                         onSheetExplored(response.message);
                     }
                 }).catch(err => {
-                    error('Failed to explore sheet:', err);
+                    error('Failed to explore sheet on the service worker:', err);
                     // Mark as failed so we don't keep retrying
                     exploration.externalSheets[result.href] = {
                         status: 'fail',
@@ -415,16 +418,17 @@ function onSheetExplored(result) {
                     };
                 });
             } else {
-                exploration.externalSheets[result.href] = {
+                 newSheetInfo = {
                     status: 'fail',
                     error: result.error
                 };
             }
         } else if (result.status === 'success') {
-            exploration.externalSheets[result.href] = {
+            newSheetInfo = {
                 status: 'success'
             };
         }
+        exploration.externalSheets[result.href] = newSheetInfo;
     }
 }
 
