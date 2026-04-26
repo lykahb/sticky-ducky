@@ -80,7 +80,7 @@ async function sendMessageToServiceWorker(message, retries = 3) {
 async function refreshSettings(context = 'unknown') {
     try {
         log('Refreshing settings from context:', context);
-        const locationData = _.omit(window.location, _.isFunction);
+        const locationData = _.pick(window.location, 'href', 'hostname', 'hash');
         const response = await sendMessageToServiceWorker({
             name: 'getSettings',
             message: {location: locationData}
